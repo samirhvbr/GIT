@@ -1,0 +1,11 @@
+# 1) Ignora tudo
+*
+
+# 2) Mas NÃO ignora os diretórios (senão o git nem entra neles)
+#!*/
+
+# 3) Agora libera o que tu quer versionar
+!.gitignore
+!README.md
+!git_*
+!.claude/
