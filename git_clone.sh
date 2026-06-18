@@ -1,9 +1,13 @@
 #!/bin/bash
-# clone.sh v1.0.0
+# clone.sh v1.1.0
 set -euo pipefail
 
-VERSION="1.0.0"
-BASE=~/x
+VERSION="1.1.0"
+
+# BASE = pasta-mãe deste script (mesma lógica do pull/push): os
+# repositórios são clonados para ~/x/, um nível acima de git/.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BASE="$(dirname "$SCRIPT_DIR")"
 
 # Formato: "URL_DO_REPO|PASTA_DESTINO"  (destino relativo a BASE)
 REPOS=(

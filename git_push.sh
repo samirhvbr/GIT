@@ -1,26 +1,31 @@
 #!/bin/bash
-# push.sh v1.1.0
+# push.sh v1.2.0
 set -euo pipefail
 
-VERSION="1.1.0"
-BASE=~/x
-REPOS=(
-    BLUE3/F1
-    BLUE3/INTRANET
-    BLUE3/MOBILE
-    BLUE3/MEUIP
-    BLUE3/SITE
-    BLUE3/WCUP
-    SHVTERM/GUI
-    SHVTERM/SITE
-    IA
-    AREA81
-)
+VERSION="1.2.0"
+
+# BASE = pasta-mãe deste script. Os scripts ficam em ~/x/git/ e os
+# projetos um nível acima (em ~/x/), então subimos de git/ para a base.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BASE="$(dirname "$SCRIPT_DIR")"
+
+# Auto-descobre todos os repositórios git sob a base, até 2 níveis
+# (BASE/repo e BASE/grupo/repo). Sempre reflete as pastas atuais.
+REPOS=()
+while IFS= read -r gitdir; do
+    repo="${gitdir%/.git}"
+    REPOS+=("${repo#"$BASE"/}")
+done < <(find "$BASE" -maxdepth 3 -type d -name .git -prune 2>/dev/null | sort)
+
+if [ ${#REPOS[@]} -eq 0 ]; then
+    echo "Nenhum repositório git encontrado em $BASE" >&2
+    exit 1
+fi
 
 GREEN='\033[0;32m'; RED='\033[0;31m'; YELLOW='\033[1;33m'
 CYAN='\033[0;36m'; BOLD='\033[1m'; NC='\033[0m'
 
-echo -e "${BOLD}push.sh v${VERSION} — base: ${BASE}${NC}"
+echo -e "${BOLD}push.sh v${VERSION} — base: ${BASE} (${#REPOS[@]} repos)${NC}"
 
 ok=(); warn=(); fail=()
 
