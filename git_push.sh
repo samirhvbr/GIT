@@ -1,8 +1,8 @@
 #!/bin/bash
-# push.sh v1.3.0
+# push.sh v1.4.0
 set -euo pipefail
 
-VERSION="1.3.0"
+VERSION="1.4.0"
 
 # BASE = pasta-mãe deste script. Os scripts ficam em ~/x/git/ e os
 # projetos um nível acima (em ~/x/), então subimos de git/ para a base.
@@ -25,14 +25,17 @@ fi
 # Repositórios a PULAR: passados como argumentos na linha de comando.
 # Ex: ./git_push.sh odysseus        → envia todos, menos odysseus
 #     ./git_push.sh odysseus blue3  → pula as duas pastas
-# Casa tanto o caminho relativo (grupo/odysseus) quanto o nome final (odysseus).
+#     ./git_push.sh DRIVE           → pula TUDO sob DRIVE/ (subárvore inteira)
+# Casa o caminho exato (grupo/odysseus), o nome final (odysseus)
+# ou uma pasta-ancestral (DRIVE pula DRIVE/ANDROID, DRIVE/IOS, ...).
 SKIP=("$@")
 should_skip() {
     local repo="$1"
     local name="${repo##*/}"
     local arg
     for arg in ${SKIP[@]+"${SKIP[@]}"}; do
-        if [ "$arg" = "$repo" ] || [ "$arg" = "$name" ]; then
+        arg="${arg%/}"   # tolera barra final: "DRIVE/" vira "DRIVE"
+        if [ "$arg" = "$repo" ] || [ "$arg" = "$name" ] || [ "${repo#"$arg"/}" != "$repo" ]; then
             return 0
         fi
     done
