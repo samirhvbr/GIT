@@ -10,24 +10,25 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BASE="$(dirname "$SCRIPT_DIR")"
 
 # Formato: "URL_DO_REPO|PASTA_DESTINO"  (destino relativo a BASE).
-# Lista espelha a estrutura atual (origin de cada repo). 16 repositórios.
+# Lista espelha a estrutura atual (origin de cada repo). 17 repositórios.
 REPOS=(
-    "git@github.com:samirhvbr/AREA81.git|AREA81"
-    "git@github.com:samirhvbr/BLUE3_F1.git|BLUE3/F1"
-    "git@github.com:samirhvbr/BLUE3_INTRANET.git|BLUE3/INTRANET"
-    "git@github.com:samirhvbr/MEUIP.git|BLUE3/MEUIP"
-    "git@github.com:samirhvbr/BLUE3-INTRANET-MOBILE.git|BLUE3/MOBILE"
-    "git@github.com:samirhvbr/BLUE3_SITE_FRONT.git|BLUE3/SITE"
-    "git@github.com:samirhvbr/BLUE3_WORLD_CUP_2026.git|BLUE3/WCUP"
-    "git@github.com:samirhvbr/GIT.git|git"
-    "git@github.com:samirhvbr/SHVIA.git|IA"
-    "git@github.com:samirhvbr/MARTHINA_CLASS.git|KIDS/MARTHINA"
-    "git@github.com:samirhvbr/RAFAELA_MEMORIA.git|KIDS/RAFAELA_JOGO_MEMORIA"
-    "git@github.com:samirhvbr/BLUE3_DEBIAN_CUSTOM_ISO.git|LINUX/B3_CUSTOM_ISO"
-    "git@github.com:samirhvbr/LINUX.git|LINUX/KERNEL"
-    "git@github.com:samirhvbr/LINUX-START.git|LINUX/START"
-    "git@github.com:samirhvbr/SHVTERM.git|SHVTERM/GUI"
-    "git@github.com:samirhvbr/SHVTERM-WEB.git|SHVTERM/SITE"
+    "https://github.com/samirhvbr/AREA81.git|AREA81"
+    "https://github.com/samirhvbr/BLUE3_F1.git|BLUE3/F1"
+    "https://github.com/samirhvbr/BLUE3_INTRANET.git|BLUE3/INTRANET"
+    "https://github.com/samirhvbr/MEUIP.git|BLUE3/MEUIP"
+    "https://github.com/samirhvbr/BLUE3-INTRANET-MOBILE.git|BLUE3/MOBILE"
+    "https://github.com/samirhvbr/BLUE3_SITE_FRONT.git|BLUE3/SITE"
+    "https://github.com/samirhvbr/BLUE3_WORLD_CUP_2026.git|BLUE3/WCUP"
+    "https://github.com/samirhvbr/GIT.git|git"
+    "https://github.com/samirhvbr/GITHUB_DESKTOP.git|GITHUB_DESKTOP"
+    "https://github.com/samirhvbr/SHVIA.git|IA"
+    "https://github.com/samirhvbr/MARTHINA_CLASS.git|KIDS/MARTHINA"
+    "https://github.com/samirhvbr/RAFAELA_MEMORIA.git|KIDS/RAFAELA_JOGO_MEMORIA"
+    "https://github.com/samirhvbr/BLUE3_DEBIAN_CUSTOM_ISO.git|LINUX/B3_CUSTOM_ISO"
+    "https://github.com/samirhvbr/LINUX.git|LINUX/KERNEL"
+    "https://github.com/samirhvbr/LINUX-START.git|LINUX/START"
+    "https://github.com/samirhvbr/SHVTERM.git|SHVTERM/GUI"
+    "https://github.com/samirhvbr/SHVTERM-WEB.git|SHVTERM/SITE"
 )
 
 GREEN='\033[0;32m'; RED='\033[0;31m'; YELLOW='\033[1;33m'
