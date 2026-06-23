@@ -7,6 +7,13 @@ Este repositório fica em `~/x/git/` e os projetos são clonados um nível acima
 em `~/x/` — chamada de **BASE** pelos scripts. Origin deste repo:
 `https://github.com/samirhvbr/GIT.git`.
 
+## Requisitos
+
+- **`git`** (todos os scripts).
+- **GitHub CLI (`gh`)** autenticado — usado pelo `git_clone` para clonar **sem pedir
+  usuário/senha**, igual no Windows e no Linux. Instale em <https://cli.github.com> e rode
+  `gh auth login` (uma vez por máquina). `git_pull`/`git_push` usam `git` direto.
+
 ## Estrutura
 
 ```
@@ -28,8 +35,8 @@ git/
 
 | Script          | Plataforma   | O que faz |
 |-----------------|--------------|-----------|
-| `git_clone.sh`  | Linux/macOS  | Clona os 17 repositórios reconstruindo a árvore de pastas. Pula os que já têm `.git`; recusa pastas existentes não vazias. |
-| `git_clone.cmd` | Windows (cmd)| Mesma função do `git_clone.sh`, em batch. Textos sem acento por compatibilidade com o code page do `cmd`. |
+| `git_clone.sh`  | Linux/macOS  | Clona os 17 repositórios via `gh repo clone`, reconstruindo a árvore de pastas. Pula os que já têm `.git`; recusa pastas existentes não vazias. |
+| `git_clone.cmd` | Windows (cmd)| Mesma função do `git_clone.sh` (também via `gh repo clone`), em batch. Textos sem acento por compatibilidade com o code page do `cmd`. |
 | `git_pull.sh`   | Linux/macOS  | Auto-descobre todo repositório git até 3 níveis abaixo da BASE e roda `git pull --ff-only` em cada um. |
 | `git_pull.cmd`  | Windows (cmd)| Mesma função do `git_pull.sh`, em batch. Descobre os repos em `BASE\repo` e `BASE\grupo\repo`. |
 | `git_push.sh`   | Linux/macOS  | Auto-descobre os repos, mostra branch, avisa sobre arquivos com commit pendente e faz `git push` dos commits prontos. |
@@ -79,7 +86,9 @@ Mapeamento `repositório → pasta destino` (relativo a `~/x/`):
 | `SHVTERM`                           | `SHVTERM/GUI`                 |
 | `SHVTERM-WEB`                       | `SHVTERM/SITE`                |
 
-Todos os clones usam HTTPS (`https://github.com/samirhvbr/<repo>.git`).
+Os clones usam o **GitHub CLI** (`gh repo clone`): a auth é gerenciada pelo `gh` — sem pedir
+usuário/senha e sem configurar chave SSH por máquina —, igual no Windows e no Linux. O protocolo
+(ssh/https) segue `gh config get git_protocol`.
 
 ## Notas
 

@@ -1,34 +1,36 @@
 #!/bin/bash
-# clone.sh v1.2.0
+# clone.sh v1.3.0
 set -euo pipefail
 
-VERSION="1.2.0"
+VERSION="1.3.0"
 
 # BASE = pasta-mãe deste script (mesma lógica do pull/push): os
 # repositórios são clonados para ~/x/, um nível acima de git/.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BASE="$(dirname "$SCRIPT_DIR")"
 
-# Formato: "URL_DO_REPO|PASTA_DESTINO"  (destino relativo a BASE).
-# Lista espelha a estrutura atual (origin de cada repo). 17 repositórios.
+# Clone via GitHub CLI (gh): funciona igual no Windows e no Linux e usa a auth
+# do gh (sem pedir usuário/senha e sem precisar configurar chave SSH por máquina).
+# O protocolo (ssh/https) segue a config do gh: `gh config get git_protocol`.
+# Formato: "OWNER/REPO|PASTA_DESTINO"  (destino relativo a BASE). 17 repositórios.
 REPOS=(
-    "https://github.com/samirhvbr/AREA81.git|AREA81"
-    "https://github.com/samirhvbr/BLUE3_F1.git|BLUE3/F1"
-    "https://github.com/samirhvbr/BLUE3_INTRANET.git|BLUE3/INTRANET"
-    "https://github.com/samirhvbr/MEUIP.git|BLUE3/MEUIP"
-    "https://github.com/samirhvbr/BLUE3-INTRANET-MOBILE.git|BLUE3/MOBILE"
-    "https://github.com/samirhvbr/BLUE3_SITE_FRONT.git|BLUE3/SITE"
-    "https://github.com/samirhvbr/BLUE3_WORLD_CUP_2026.git|BLUE3/WCUP"
-    "https://github.com/samirhvbr/GIT.git|git"
-    "https://github.com/samirhvbr/GITHUB_DESKTOP.git|GITHUB_DESKTOP"
-    "https://github.com/samirhvbr/SHVIA.git|IA"
-    "https://github.com/samirhvbr/MARTHINA_CLASS.git|KIDS/MARTHINA"
-    "https://github.com/samirhvbr/RAFAELA_MEMORIA.git|KIDS/RAFAELA_JOGO_MEMORIA"
-    "https://github.com/samirhvbr/BLUE3_DEBIAN_CUSTOM_ISO.git|LINUX/B3_CUSTOM_ISO"
-    "https://github.com/samirhvbr/LINUX.git|LINUX/KERNEL"
-    "https://github.com/samirhvbr/LINUX-START.git|LINUX/START"
-    "https://github.com/samirhvbr/SHVTERM.git|SHVTERM/GUI"
-    "https://github.com/samirhvbr/SHVTERM-WEB.git|SHVTERM/SITE"
+    "samirhvbr/AREA81|AREA81"
+    "samirhvbr/BLUE3_F1|BLUE3/F1"
+    "samirhvbr/BLUE3_INTRANET|BLUE3/INTRANET"
+    "samirhvbr/MEUIP|BLUE3/MEUIP"
+    "samirhvbr/BLUE3-INTRANET-MOBILE|BLUE3/MOBILE"
+    "samirhvbr/BLUE3_SITE_FRONT|BLUE3/SITE"
+    "samirhvbr/BLUE3_WORLD_CUP_2026|BLUE3/WCUP"
+    "samirhvbr/GIT|git"
+    "samirhvbr/GITHUB_DESKTOP|GITHUB_DESKTOP"
+    "samirhvbr/SHVIA|IA"
+    "samirhvbr/MARTHINA_CLASS|KIDS/MARTHINA"
+    "samirhvbr/RAFAELA_MEMORIA|KIDS/RAFAELA_JOGO_MEMORIA"
+    "samirhvbr/BLUE3_DEBIAN_CUSTOM_ISO|LINUX/B3_CUSTOM_ISO"
+    "samirhvbr/LINUX|LINUX/KERNEL"
+    "samirhvbr/LINUX-START|LINUX/START"
+    "samirhvbr/SHVTERM|SHVTERM/GUI"
+    "samirhvbr/SHVTERM-WEB|SHVTERM/SITE"
 )
 
 GREEN='\033[0;32m'; RED='\033[0;31m'; YELLOW='\033[1;33m'
@@ -36,15 +38,25 @@ CYAN='\033[0;36m'; BOLD='\033[1m'; NC='\033[0m'
 
 echo -e "${BOLD}clone.sh v${VERSION} — base: ${BASE}${NC}"
 
+# Pré-requisito: gh instalado e autenticado (mesma exigência no Windows e no Linux).
+if ! command -v gh >/dev/null 2>&1; then
+    echo -e "${RED}✗ gh (GitHub CLI) não encontrado.${NC} Instale em https://cli.github.com e rode 'gh auth login'."
+    exit 1
+fi
+if ! gh auth status >/dev/null 2>&1; then
+    echo -e "${RED}✗ gh não autenticado.${NC} Rode: gh auth login"
+    exit 1
+fi
+
 ok=(); skip=(); fail=()
 
 for entry in "${REPOS[@]}"; do
-    url="${entry%%|*}"
+    repo="${entry%%|*}"
     dest="${entry##*|}"
     target="$BASE/$dest"
 
     echo -e "\n${CYAN}${BOLD}── $dest${NC}"
-    echo -e "   ${url}"
+    echo -e "   ${repo}"
 
     # Já clonado: pula
     if [ -d "$target/.git" ]; then
@@ -59,7 +71,7 @@ for entry in "${REPOS[@]}"; do
     fi
 
     mkdir -p "$(dirname "$target")"
-    if git clone "$url" "$target" 2>&1 | sed 's/^/   /'; then
+    if gh repo clone "$repo" "$target" 2>&1 | sed 's/^/   /'; then
         ok+=("$dest")
     else
         fail+=("$dest")
