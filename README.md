@@ -25,6 +25,8 @@ git/
 ├── git_pull.cmd       # equivalente do pull para Windows (cmd)
 ├── git_push.sh        # status + git push em todos os repos (Linux/macOS)
 ├── git_push.cmd       # equivalente do push para Windows (cmd)
+├── git_status.sh      # git status (somente leitura) em todos os repos (Linux/macOS)
+├── git_status.cmd     # equivalente do status para Windows (cmd)
 ├── .gitattributes     # eol=lf para *.sh, eol=crlf para *.cmd
 ├── .gitignore         # ignora tudo, versiona só os arquivos do utilitário
 └── .claude/
@@ -41,6 +43,8 @@ git/
 | `git_pull.cmd`  | Windows (cmd)| Mesma função do `git_pull.sh`, em batch. Descobre os repos em `BASE\repo` e `BASE\grupo\repo`. |
 | `git_push.sh`   | Linux/macOS  | Auto-descobre os repos, mostra branch, avisa sobre arquivos com commit pendente e faz `git push` dos commits prontos. |
 | `git_push.cmd`  | Windows (cmd)| Mesma função do `git_push.sh`, em batch. Descobre os repos em `BASE\repo` e `BASE\grupo\repo`. |
+| `git_status.sh` | Linux/macOS  | Auto-descobre os repos e roda `git status` **somente leitura** em cada um: branch, commits a enviar/atrás do remoto e arquivos pendentes. Não altera nada. Aceita pastas a pular por argumento. |
+| `git_status.cmd`| Windows (cmd)| Mesma função do `git_status.sh` (somente leitura), em batch. Mostra branch, commits a enviar/atrás e arquivos pendentes. |
 
 A lista de repositórios e seus destinos é fixa só no `git_clone` (origin de cada
 repo). `git_pull` e `git_push` **descobrem** os repositórios automaticamente
