@@ -10,3 +10,7 @@
 !README.md
 !git_*
 !.claude/
+!.continue/
+!.continue/**
+!deploy/
+!deploy/**

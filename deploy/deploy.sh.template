@@ -1,0 +1,180 @@
+#!/bin/bash
+# deploy.sh — TEMPLATE PADRÃO v1.0  ·  guia: git/deploy/README.md
+#
+# Deploy idempotente de app Laravel. Copie para a raiz do projeto, ajuste o bloco
+# "Config (AJUSTE POR PROJETO)" e dê +x. Modelo padrão (igual em todos os projetos):
+#
+#   - Roda como ROOT. Desce p/ os usuários auxiliares via sudo, SEM senha:
+#       · OWNER   (dono do tree, auto-detectado) → git / composer / npm / assets
+#       · WEB_USER (usuário do web server)        → artisan de RUNTIME
+#         (down/backup/migrate/cache/up), que escreve em storage/ e bootstrap/cache/.
+#   - Lock em /run (tmpfs, root) — NUNCA em /tmp: lá o fs.protected_regular do
+#     kernel bloqueia root de reabrir um lock criado por outro usuário.
+#   - Sai cedo se nada novo no branch. Pula composer/npm se os lockfiles não mudaram.
+#   - Modo manutenção + (opcional) backup do banco ANTES de migrar.
+#   - trap em ERR: sai da manutenção, tenta rollback do último batch, avisa.
+#
+# Pré-requisito de servidor: ownership do tree = OWNER:WEB_USER (código, web só lê);
+# storage/ e bootstrap/cache/ = WEB_USER (web escreve). Ver git/deploy/README.md.
+
+set -euo pipefail
+
+# ── Config (AJUSTE POR PROJETO) ──────────────────────────────────────────────
+DIR="${DEPLOY_DIR:-/srv/www/EXEMPLO}"      # raiz do projeto no servidor
+APP="exemplo"                               # nome curto (lock + mensagens)
+WEB_USER="www-data"                         # usuário do web server (runtime)
+BRANCH="${DEPLOY_BRANCH:-master}"
+LOCK="/run/${APP}-deploy.lock"              # /run (root) — nunca /tmp
+
+# Toggles opcionais (deixe vazio p/ desligar):
+BACKUP_CMD="php artisan mariadb:backup"     # comando de backup pré-migração ("" = pular)
+BUILD_FRONTEND="1"                          # "1" roda npm ci + build quando o front muda
+
+# ── Helpers ──────────────────────────────────────────────────────────────────
+log() { printf '[%(%H:%M:%S)T] %s\n' -1 "$*"; }
+
+# Lê uma chave do .env sem 'source' (evita quebra com quoting). Ausente → vazio.
+get_env() {
+    local key=$1
+    [ -f .env ] || return 0
+    { grep -E "^${key}=" .env 2>/dev/null || true; } | head -1 | cut -d= -f2- | sed 's/^"//;s/"$//'
+}
+
+# Roda como WEB_USER (artisan de runtime). No-op se já somos ele.
+www() {
+    if [ "$(id -un)" = "$WEB_USER" ]; then "$@"; else sudo -u "$WEB_USER" "$@"; fi
+}
+
+# Roda como o DONO do tree (git/composer/npm). No-op se já somos ele.
+# OWNER é definido após o cd "$DIR".
+asowner() {
+    if [ "$(id -un)" = "$OWNER" ]; then "$@"; else sudo -u "$OWNER" "$@"; fi
+}
+
+# Normaliza dono de um caminho de build p/ OWNER, só se houver divergência
+# (ex.: 'chown -R www-data vendor' numa recuperação manual).
+heal_owner() {
+    local p=$1
+    [ -e "$p" ] || return 0
+    [ "$(stat -c '%U' "$p")" = "$OWNER" ] && return 0
+    log "  ⚠️  $p pertence a $(stat -c '%U' "$p") — normalizando p/ $OWNER..."
+    chown -R "$OWNER": "$p"   # somos root (garantido nos pré-requisitos)
+}
+
+# Telegram (silencioso se as credenciais não estão no .env).
+notify() {
+    [ -n "${TG_BOT:-}" ] && [ -n "${TG_CHAT:-}" ] || return 0
+    curl -fsS -m 5 -X POST "https://api.telegram.org/bot${TG_BOT}/sendMessage" \
+        --data-urlencode "chat_id=${TG_CHAT}" --data-urlencode "text=$1" \
+        --data-urlencode "parse_mode=HTML" >/dev/null 2>&1 || log "(notify Telegram falhou)"
+}
+
+cleanup_on_failure() {
+    log "❌ Deploy falhou — reativando aplicação..."
+    www php artisan up >/dev/null 2>&1 || true
+    notify "❌ <b>Deploy ${APP} falhou</b> em <code>$(git rev-parse --short HEAD 2>/dev/null || echo '?')</code>"
+}
+
+fail() { log "❌ $*"; cleanup_on_failure; exit 1; }
+
+# ── Pré-requisito: roda como ROOT ────────────────────────────────────────────
+# Padrão único: o deploy roda como root e desce p/ OWNER/WEB_USER via sudo (sem
+# senha — dispensa NOPASSWD). Habilita o lock em /run.
+if [ "$(id -u)" -ne 0 ]; then
+    printf '❌ rode como root: sudo bash %s\n' "$0" >&2
+    exit 1
+fi
+
+# ── Lock ─────────────────────────────────────────────────────────────────────
+exec 9>"$LOCK"
+flock -n 9 || { printf '❌ outro deploy já está rodando (lock: %s)\n' "$LOCK" >&2; exit 1; }
+
+cd "$DIR" || { printf '❌ %s não existe\n' "$DIR" >&2; exit 1; }
+OWNER=$(stat -c '%U' "$DIR")   # dono do tree (auxiliar p/ git/composer/npm)
+
+TG_BOT=$(get_env DEPLOY_TELEGRAM_BOT_TOKEN)
+TG_CHAT=$(get_env DEPLOY_TELEGRAM_CHAT_ID)
+
+# ── 1. Fetch e checagem de mudanças ─────────────────────────────────────────
+log "==> Buscando alterações no branch $BRANCH..."
+asowner git fetch --quiet origin "$BRANCH" || { log "git fetch falhou"; exit 1; }
+LOCAL=$(asowner git rev-parse HEAD)
+REMOTE=$(asowner git rev-parse "origin/$BRANCH")
+if [ "$LOCAL" = "$REMOTE" ]; then
+    log "✓ Nada novo em origin/$BRANCH. Saindo."
+    exit 0
+fi
+if ! asowner git diff --quiet || ! asowner git diff --cached --quiet; then
+    log "⚠️  Working tree tem mudanças locais não commitadas."
+fi
+log "==> Trazendo $(asowner git rev-parse --short "$LOCAL") → $(asowner git rev-parse --short "$REMOTE")..."
+asowner git merge --ff-only "origin/$BRANCH" \
+    || { log "❌ fast-forward falhou (working tree divergiu? resolva manual)"; exit 1; }
+CHANGED=$(asowner git diff --name-only "$LOCAL" "$REMOTE")
+
+trap cleanup_on_failure ERR   # daqui pra frente, falha dispara cleanup
+
+# ── 2. Modo manutenção ──────────────────────────────────────────────────────
+log "==> Ativando modo de manutenção..."
+www php artisan down --refresh=15
+
+# ── 3. Backup do banco (antes de mexer em schema) ───────────────────────────
+if [ -n "$BACKUP_CMD" ]; then
+    log "==> Backup do banco ($BACKUP_CMD)..."
+    www $BACKUP_CMD || fail "backup falhou — aborta antes de tocar em schema"
+fi
+
+# ── 4. Dependências PHP (só se composer.lock mudou) ─────────────────────────
+if grep -q '^composer\.lock$' <<<"$CHANGED"; then
+    log "==> composer.lock mudou — composer install (como $OWNER)..."
+    heal_owner vendor
+    asowner env COMPOSER_ALLOW_SUPERUSER=1 composer install \
+        --no-dev --optimize-autoloader --no-interaction --prefer-dist --no-scripts \
+        || fail "composer install falhou"
+    # --no-scripts evita package:discover como OWNER (sujaria bootstrap/cache).
+    # Apaga o cache de pacotes como WEB_USER; o framework redescobre no próximo boot.
+    www find bootstrap/cache -maxdepth 1 -type f \
+        \( -name 'packages.php' -o -name 'services.php' \) -delete 2>/dev/null || true
+else
+    log "✓ composer.lock inalterado — pulando composer install."
+fi
+
+# ── 5. Frontend (npm ci + build) — só se arquivos do front mudaram ──────────
+if [ -n "$BUILD_FRONTEND" ] && grep -qE '^(package(-lock)?\.json|vite\.config\.(js|ts)|resources/(js|scss|css)/)' <<<"$CHANGED"; then
+    log "==> Frontend mudou — npm ci + build (como $OWNER)..."
+    heal_owner node_modules
+    asowner npm ci --no-audit --no-fund --silent
+    asowner npm run build
+    asowner php artisan assets:manifest 2>/dev/null || true
+else
+    log "✓ Frontend inalterado — pulando npm ci + build."
+fi
+
+# ── 6. Migrations (migrate; rollback do último batch se falhar) ─────────────
+log "==> Verificando migrações pendentes..."
+www php artisan migrate:status 2>/dev/null | grep -i "pending" || log "  (nenhuma pendente)"
+log "==> Rodando migrate --force..."
+if ! www php artisan migrate --force; then
+    log "❌ migrate falhou — tentando rollback do último batch..."
+    www php artisan migrate:rollback --force --step=1 \
+        && log "✓ rollback OK." || log "⚠️  rollback falhou — restaure do backup."
+    fail "migrate falhou"
+fi
+
+# ── 7. Caches de produção ───────────────────────────────────────────────────
+log "==> Reconstruindo caches..."
+www php artisan optimize:clear
+www php artisan config:cache
+www php artisan route:cache
+www php artisan view:cache
+www php artisan event:cache 2>/dev/null || true
+
+# ── 8. Sai do modo manutenção ───────────────────────────────────────────────
+log "==> Desativando modo de manutenção..."
+www php artisan up
+trap - ERR
+
+SHORT_SHA=$(asowner git rev-parse --short HEAD)
+SUBJECT=$(asowner git log -1 --pretty=%s | head -c 80)
+log "✅ Deploy concluído: $SHORT_SHA ($SUBJECT)"
+notify "✅ <b>Deploy ${APP} concluído</b>: <code>$SHORT_SHA</code> — $SUBJECT"

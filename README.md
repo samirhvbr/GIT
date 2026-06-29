@@ -28,7 +28,12 @@ git/
 ├── git_status.sh      # git status (somente leitura) em todos os repos (Linux/macOS)
 ├── git_status.cmd     # equivalente do status para Windows (cmd)
 ├── .gitattributes     # eol=lf para *.sh, eol=crlf para *.cmd
-├── .gitignore         # ignora tudo, versiona só os arquivos do utilitário
+├── .gitignore         # ignora tudo, versiona só o que está no whitelist
+├── deploy/
+│   ├── deploy.sh.template  # modelo de deploy Laravel (copiar p/ raiz do projeto)
+│   └── README.md           # padrão de deploy (ownership, lock, checklist)
+├── .continue/
+│   └── README_20260623.md  # notas do Continue
 └── .claude/
     └── README.md      # notas de configuração do Claude Code (Blue3)
 ```
@@ -98,8 +103,13 @@ usuário/senha e sem configurar chave SSH por máquina —, igual no Windows e n
 
 - **Line endings** (`.gitattributes`): `*.sh` sempre LF, `*.cmd` sempre CRLF —
   o repo roda tanto em Linux quanto em Windows.
-- **`.gitignore`**: ignora tudo por padrão e versiona apenas os próprios
-  arquivos do utilitário (`README.md`, `git_*`, `.gitattributes`, `.gitignore`,
-  `.claude/`).
+- **`.gitignore`**: ignora tudo por padrão e versiona apenas o que está no
+  whitelist (`README.md`, `git_*`, `.gitattributes`, `.gitignore`, `.claude/`,
+  `.continue/`, `deploy/`). **Script novo precisa começar com `git_`** (ou ser
+  adicionado ao whitelist) — senão cai no `*` e fica invisível pro git (não
+  aparece no `status`, não sobe no `push`).
+- **`deploy/`**: fonte da verdade do `deploy.sh.template` (padrão de deploy
+  Laravel) — copiado para a raiz de cada projeto. Segredos vêm do `.env` em
+  runtime, nunca versionados.
 - **`.claude/README.md`**: documenta a configuração do Claude Code usada no
   contexto Blue3 (modelo, effort, permissões bloqueadas).
