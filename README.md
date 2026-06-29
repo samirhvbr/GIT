@@ -7,6 +7,17 @@ Este repositório fica em `~/x/git/` e os projetos são clonados um nível acima
 em `~/x/` — chamada de **BASE** pelos scripts. Origin deste repo:
 `https://github.com/samirhvbr/GIT.git`.
 
+## 🔄 Antes de começar: `git pull`
+
+**SEMPRE** puxe atualizações remotas antes de escrever ou alterar qualquer coisa. `git pull` está pré-autorizado (allow). Aqui no workspace `~/x/` dá para atualizar **todos** os repositórios de uma vez com `git_pull.sh`; para um único repo, basta `git pull`.
+
+```bash
+git pull            # este repo
+./git_pull.sh       # todos os repositórios do ~/x de uma vez
+```
+
+Trabalhar sobre base desatualizada gera conflitos. Puxe primeiro, sempre.
+
 ## Requisitos
 
 - **`git`** (todos os scripts).
