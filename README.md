@@ -1,92 +1,92 @@
 # Auto Git
 
-Scripts utilitários para gerenciar **todos os repositórios** do workspace `~/x/`
-de uma vez só: clonar, atualizar (`pull`) e enviar (`push`) em lote.
+Utility scripts to manage **all repositories** in the `~/x/` workspace
+at once: clone, update (`pull`) and send (`push`) in bulk.
 
-Este repositório fica em `~/x/git/` e os projetos são clonados um nível acima,
-em `~/x/` — chamada de **BASE** pelos scripts. Origin deste repo:
+This repository lives in `~/x/git/` and the projects are cloned one level above,
+in `~/x/` — referred to as **BASE** by the scripts. Origin of this repo:
 `https://github.com/samirhvbr/GIT.git`.
 
-## 🔄 Antes de começar: `git pull`
+## 🔄 Before you start: `git pull`
 
-**SEMPRE** puxe atualizações remotas antes de escrever ou alterar qualquer coisa. `git pull` está pré-autorizado (allow). Aqui no workspace `~/x/` dá para atualizar **todos** os repositórios de uma vez com `git_pull.sh`; para um único repo, basta `git pull`.
+**ALWAYS** pull remote updates before writing or changing anything. `git pull` is pre-authorized (allow). Here in the `~/x/` workspace you can update **all** repositories at once with `git_pull.sh`; for a single repo, just `git pull`.
 
 ```bash
-git pull            # este repo
-./git_pull.sh       # todos os repositórios do ~/x de uma vez
+git pull            # this repo
+./git_pull.sh       # all repositories in ~/x at once
 ```
 
-Trabalhar sobre base desatualizada gera conflitos. Puxe primeiro, sempre.
+Working on top of an outdated base causes conflicts. Pull first, always.
 
-## Requisitos
+## Requirements
 
-- **`git`** (todos os scripts).
-- **GitHub CLI (`gh`)** autenticado — usado pelo `git_clone` para clonar **sem pedir
-  usuário/senha**, igual no Windows e no Linux. Instale em <https://cli.github.com> e rode
-  `gh auth login` (uma vez por máquina). `git_pull`/`git_push` usam `git` direto.
+- **`git`** (all scripts).
+- **GitHub CLI (`gh`)** authenticated — used by `git_clone` to clone **without asking for a
+  username/password**, the same on Windows and Linux. Install it from <https://cli.github.com> and run
+  `gh auth login` (once per machine). `git_pull`/`git_push` use `git` directly.
 
-## Estrutura
+## Structure
 
 ```
 git/
-├── README.md          # este arquivo
-├── git_clone.sh       # clona os 17 repos (Linux/macOS)
-├── git_clone.cmd      # equivalente do clone para Windows (cmd)
-├── git_pull.sh        # git pull --ff-only em todos os repos (Linux/macOS)
-├── git_pull.cmd       # equivalente do pull para Windows (cmd)
-├── git_push.sh        # status + git push em todos os repos (Linux/macOS)
-├── git_push.cmd       # equivalente do push para Windows (cmd)
-├── git_status.sh      # git status (somente leitura) em todos os repos (Linux/macOS)
-├── git_status.cmd     # equivalente do status para Windows (cmd)
-├── .gitattributes     # eol=lf para *.sh, eol=crlf para *.cmd
-├── .gitignore         # ignora tudo, versiona só o que está no whitelist
+├── README.md          # this file
+├── git_clone.sh       # clones the 17 repos (Linux/macOS)
+├── git_clone.cmd      # clone equivalent for Windows (cmd)
+├── git_pull.sh        # git pull --ff-only in all repos (Linux/macOS)
+├── git_pull.cmd       # pull equivalent for Windows (cmd)
+├── git_push.sh        # status + git push in all repos (Linux/macOS)
+├── git_push.cmd       # push equivalent for Windows (cmd)
+├── git_status.sh      # git status (read-only) in all repos (Linux/macOS)
+├── git_status.cmd     # status equivalent for Windows (cmd)
+├── .gitattributes     # eol=lf for *.sh, eol=crlf for *.cmd
+├── .gitignore         # ignores everything, versions only what is in the whitelist
 ├── deploy/
-│   ├── deploy.sh.template  # modelo de deploy Laravel (copiar p/ raiz do projeto)
-│   └── README.md           # padrão de deploy (ownership, lock, checklist)
+│   ├── deploy.sh.template  # Laravel deploy template (copy to the project root)
+│   └── README.md           # deploy standard (ownership, lock, checklist)
 ├── .continue/
-│   └── README_20260623.md  # notas do Continue
+│   └── README_20260623.md  # Continue notes
 └── .claude/
-    └── README.md      # notas de configuração do Claude Code (Blue3)
+    └── README.md      # Claude Code configuration notes (Blue3)
 ```
 
 ## Scripts
 
-| Script          | Plataforma   | O que faz |
+| Script          | Platform     | What it does |
 |-----------------|--------------|-----------|
-| `git_clone.sh`  | Linux/macOS  | Clona os 17 repositórios via `gh repo clone`, reconstruindo a árvore de pastas. Pula os que já têm `.git`; recusa pastas existentes não vazias. |
-| `git_clone.cmd` | Windows (cmd)| Mesma função do `git_clone.sh` (também via `gh repo clone`), em batch. Textos sem acento por compatibilidade com o code page do `cmd`. |
-| `git_pull.sh`   | Linux/macOS  | Auto-descobre todo repositório git até 3 níveis abaixo da BASE e roda `git pull --ff-only` em cada um. |
-| `git_pull.cmd`  | Windows (cmd)| Mesma função do `git_pull.sh`, em batch. Descobre os repos em `BASE\repo` e `BASE\grupo\repo`. |
-| `git_push.sh`   | Linux/macOS  | Auto-descobre os repos, mostra branch, avisa sobre arquivos com commit pendente e faz `git push` dos commits prontos. |
-| `git_push.cmd`  | Windows (cmd)| Mesma função do `git_push.sh`, em batch. Descobre os repos em `BASE\repo` e `BASE\grupo\repo`. |
-| `git_status.sh` | Linux/macOS  | Auto-descobre os repos e roda `git status` **somente leitura** em cada um: branch, commits a enviar/atrás do remoto e arquivos pendentes. Não altera nada. Aceita pastas a pular por argumento. |
-| `git_status.cmd`| Windows (cmd)| Mesma função do `git_status.sh` (somente leitura), em batch. Mostra branch, commits a enviar/atrás e arquivos pendentes. |
+| `git_clone.sh`  | Linux/macOS  | Clones the 17 repositories via `gh repo clone`, rebuilding the folder tree. Skips those that already have `.git`; refuses non-empty existing folders. |
+| `git_clone.cmd` | Windows (cmd)| Same function as `git_clone.sh` (also via `gh repo clone`), in batch. Text without accents for compatibility with the `cmd` code page. |
+| `git_pull.sh`   | Linux/macOS  | Auto-discovers every git repository up to 3 levels below BASE and runs `git pull --ff-only` on each one. |
+| `git_pull.cmd`  | Windows (cmd)| Same function as `git_pull.sh`, in batch. Discovers repos in `BASE\repo` and `BASE\group\repo`. |
+| `git_push.sh`   | Linux/macOS  | Auto-discovers the repos, shows the branch, warns about files with a pending commit and runs `git push` for the ready commits. |
+| `git_push.cmd`  | Windows (cmd)| Same function as `git_push.sh`, in batch. Discovers repos in `BASE\repo` and `BASE\group\repo`. |
+| `git_status.sh` | Linux/macOS  | Auto-discovers the repos and runs `git status` **read-only** on each one: branch, commits ahead of/behind the remote and pending files. Changes nothing. Accepts folders to skip via argument. |
+| `git_status.cmd`| Windows (cmd)| Same function as `git_status.sh` (read-only), in batch. Shows branch, commits ahead/behind and pending files. |
 
-A lista de repositórios e seus destinos é fixa só no `git_clone` (origin de cada
-repo). `git_pull` e `git_push` **descobrem** os repositórios automaticamente
-varrendo a BASE, então refletem sempre as pastas presentes no momento.
+The list of repositories and their destinations is fixed only in `git_clone` (origin of each
+repo). `git_pull` and `git_push` **discover** the repositories automatically by
+scanning BASE, so they always reflect the folders present at the time.
 
-## Uso
+## Usage
 
 ```bash
-# Linux/macOS — a partir de ~/x/git/
-./git_clone.sh      # clona tudo na primeira vez
-./git_pull.sh       # atualiza todos os repos
-./git_push.sh       # envia commits pendentes de todos os repos
+# Linux/macOS — from ~/x/git/
+./git_clone.sh      # clones everything the first time
+./git_pull.sh       # updates all repos
+./git_push.sh       # pushes pending commits from all repos
 ```
 
 ```bat
-:: Windows — a partir de ~/x/git/
-git_clone.cmd      :: clona tudo na primeira vez
-git_pull.cmd       :: atualiza todos os repos
-git_push.cmd       :: envia commits pendentes de todos os repos
+:: Windows — from ~/x/git/
+git_clone.cmd      :: clones everything the first time
+git_pull.cmd       :: updates all repos
+git_push.cmd       :: pushes pending commits from all repos
 ```
 
-## Repositórios gerenciados
+## Managed repositories
 
-Mapeamento `repositório → pasta destino` (relativo a `~/x/`):
+Mapping `repository → destination folder` (relative to `~/x/`):
 
-| Repositório (GitHub)                | Destino                       |
+| Repository (GitHub)                 | Destination                   |
 |-------------------------------------|-------------------------------|
 | `AREA81`                            | `AREA81`                      |
 | `BLUE3_F1`                          | `BLUE3/F1`                    |
@@ -106,21 +106,21 @@ Mapeamento `repositório → pasta destino` (relativo a `~/x/`):
 | `SHVTERM`                           | `SHVTERM/GUI`                 |
 | `SHVTERM-WEB`                       | `SHVTERM/SITE`                |
 
-Os clones usam o **GitHub CLI** (`gh repo clone`): a auth é gerenciada pelo `gh` — sem pedir
-usuário/senha e sem configurar chave SSH por máquina —, igual no Windows e no Linux. O protocolo
-(ssh/https) segue `gh config get git_protocol`.
+The clones use the **GitHub CLI** (`gh repo clone`): auth is managed by `gh` — without asking for a
+username/password and without configuring an SSH key per machine —, the same on Windows and Linux. The protocol
+(ssh/https) follows `gh config get git_protocol`.
 
-## Notas
+## Notes
 
-- **Line endings** (`.gitattributes`): `*.sh` sempre LF, `*.cmd` sempre CRLF —
-  o repo roda tanto em Linux quanto em Windows.
-- **`.gitignore`**: ignora tudo por padrão e versiona apenas o que está no
+- **Line endings** (`.gitattributes`): `*.sh` always LF, `*.cmd` always CRLF —
+  the repo runs on both Linux and Windows.
+- **`.gitignore`**: ignores everything by default and versions only what is in the
   whitelist (`README.md`, `git_*`, `.gitattributes`, `.gitignore`, `.claude/`,
-  `.continue/`, `deploy/`). **Script novo precisa começar com `git_`** (ou ser
-  adicionado ao whitelist) — senão cai no `*` e fica invisível pro git (não
-  aparece no `status`, não sobe no `push`).
-- **`deploy/`**: fonte da verdade do `deploy.sh.template` (padrão de deploy
-  Laravel) — copiado para a raiz de cada projeto. Segredos vêm do `.env` em
-  runtime, nunca versionados.
-- **`.claude/README.md`**: documenta a configuração do Claude Code usada no
-  contexto Blue3 (modelo, effort, permissões bloqueadas).
+  `.continue/`, `deploy/`). **A new script must start with `git_`** (or be
+  added to the whitelist) — otherwise it falls under `*` and becomes invisible to git (does not
+  show up in `status`, does not get pushed).
+- **`deploy/`**: source of truth for `deploy.sh.template` (Laravel deploy
+  standard) — copied to the root of each project. Secrets come from the `.env` at
+  runtime, never versioned.
+- **`.claude/README.md`**: documents the Claude Code configuration used in the
+  Blue3 context (model, effort, blocked permissions).
