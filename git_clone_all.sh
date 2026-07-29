@@ -1,86 +1,87 @@
 #!/bin/bash
-# clone_all.sh v1.6.0
+# clone_all.sh v1.7.0
 set -euo pipefail
 
 # --dry-run/-n é filtrado ANTES de tudo: o destino sai de "$2", então a flag não
 # pode ocupar posição. Mostrar o plano antes de criar árvore de diretórios não é
 # luxo — este script é o único que ESCREVE layout, e conferir depois é caro.
 DRY_RUN=0
+APRENDER=0
 _args=()
 for _a in ${@+"$@"}; do
     case "$_a" in
         --dry-run|-n) DRY_RUN=1 ;;
+        --aprender)   APRENDER=1 ;;
         *) _args+=("$_a") ;;
     esac
 done
 set -- ${_args[@]+"${_args[@]}"}
 
-VERSION="1.6.0"
+VERSION="1.7.0"
 
-# ── Agrupamento automático por prefixo ───────────────────────────────────────
-# 2+ repositórios que começam igual viram uma PASTA com esse início:
-#   SHVIA-WEB, SHVIA-DESKTOP, ...  →  SHVIA/SHVIA-WEB, SHVIA/SHVIA-DESKTOP
-#   GIT (sozinho)                  →  GIT
+# ── Como o destino de cada repositório é decidido ─────────────────────────────
+# A meta é NÃO precisar de manutenção manual quando a lista de repositórios muda.
+# Repositório novo cai numa regra sozinho; só o que nenhuma regra alcança entra no
+# arquivo de exceções — e mesmo esse é GERADO (--aprender), não escrito à mão.
+#
+# Ordem de decisão:
+#   1. exceção no repos-grupos.map            (gerada por --aprender)
+#   2. dono de fora dos donos consultados     → GRUPO_TERCEIROS
+#   3. fork                                   → GRUPO_TERCEIROS
+#   4. 2+ repos com o mesmo início            → PREFIXO/
+#   5. resto                                  → raiz
+#
+# As regras 2 e 3 não são chute: dos 13 repositórios no 3/ desta máquina, 7 são
+# forks marcados na API e 6 são clones de contas de terceiros. "Terceiro" é um dado
+# que o GitHub já responde — não precisava de lista.
 #
 # A pasta guarda o NOME COMPLETO do repo, e não o sufixo (`SHVIA/WEB`). É decisão:
 # nem todo grupo nasce de prefixo — `KIDS/` junta MARTHINA-CLASS e RAFAELA-MEMORIA,
 # que não têm início comum. Encurtando só os que têm, o layout misturaria dois
 # estilos e o nome da pasta deixaria de dizer qual é o repositório — justamente o
 # que o git_status/pull/push mostram na tela.
-#
-# EXCEÇÕES: o que a inferência não pega (grupo temático) ou pega errado (prefixo
-# coincidente). Formato "REPO|GRUPO"; GRUPO vazio força a raiz.
-GRUPOS_MANUAIS=(
-    # Temáticos — sem prefixo comum, a inferência nunca acertaria sozinha
-    "MARTHINA-CLASS|KIDS"
-    "RAFAELA-MEMORIA|KIDS"
-    "KIDS-CAT|KIDS"
-    # Terceiros e diversos: baldes, não projetos nossos
-    "ai-memory|3"
-    "ai-usagebar|3"
-    "github-visualize|3"
-    "claude-desktop-debian|3"
-    "hermes-agent|3"
-    "mtzSpider|3"
-    "sinalrf|3"
-    "Vitals|3"
-    "FrankMD|3"
-    "FRANK_KARAOKE|3"
-    "matomo-blue3|3"
-    "MiMo-Code|3"
-    "odysseus|3"
-    "hermes-achievements|3"
-    "CSL-Redes|3"
-    "speedtest|3"
-    # Da org BLUE3-ISP mas sem o prefixo no nome — a inferência os deixaria na raiz
-    "BRASILEIRAO_A_2026|BLUE3"
-    "MEUIP|BLUE3"
-    "CNPJ|"
-    "ONLINE|"
-    "EOP|"
-    # Prefixo coincidente: AI-BENCHMARK é nosso, ai-memory/ai-usagebar são forks —
-    # sem isto os três virariam um grupo "AI/" que não quer dizer nada.
-    "AI-BENCHMARK|"
-    "GITHUB-DESKTOP|"
-)
+GRUPO_TERCEIROS="${GRUPO_TERCEIROS:-3}"
+MAPA="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/repos-grupos.map"
 
-# Devolve o caminho de destino (relativo ao DEST_DIR) para um repositório.
-# Precisa de PREFIXOS_AGRUPADOS já calculado (ver o 1º passo, mais abaixo).
+# Preenchidos antes do laço: nomes de repos que são fork, prefixos com 2+ repos, e
+# as exceções lidas do mapa. Strings com uma entrada por linha — o bash do macOS é
+# 3.2 e não tem array associativo.
+FORKS=""
+PREFIXOS_AGRUPADOS=""
+EXCECOES=""
+
+carregar_excecoes() {
+    [ -f "$MAPA" ] || return 0
+    # Formato: "REPO<TAB ou espaços>GRUPO"; GRUPO vazio ou "-" força a raiz.
+    EXCECOES="$(grep -vE '^[[:space:]]*(#|$)' "$MAPA" || true)"
+}
+
+# Devolve o caminho de destino (relativo ao DEST_DIR) para "owner/nome".
 destino_de() {
-    local nome="$1" par repo grupo pfx
-    for par in ${GRUPOS_MANUAIS[@]+"${GRUPOS_MANUAIS[@]}"}; do
-        repo="${par%%|*}"; grupo="${par#*|}"
-        if [ "$repo" = "$nome" ]; then
-            [ -z "$grupo" ] && { printf '%s' "$nome"; return; }
-            printf '%s/%s' "$grupo" "$nome"; return
-        fi
-    done
+    local full="$1" owner nome grupo pfx
+    owner="${full%%/*}"; nome="${full##*/}"
+
+    # 1. exceção explícita
+    grupo="$(printf '%s\n' "$EXCECOES" | awk -v n="$nome" '$1==n {print $2; exit}')"
+    if [ -n "$grupo" ]; then
+        [ "$grupo" = "-" ] && { printf '%s' "$nome"; return; }
+        printf '%s/%s' "$grupo" "$nome"; return
+    fi
+
+    # 2. dono de fora / 3. fork → balde de terceiros
+    if ! printf '%s\n' "$DONOS_LISTA" | grep -qxF "$owner" \
+       || printf '%s\n' "$FORKS" | grep -qxF "$nome"; then
+        printf '%s/%s' "$GRUPO_TERCEIROS" "$nome"; return
+    fi
+
+    # 4. prefixo compartilhado
     pfx="$(printf '%s' "${nome%%[-_]*}" | tr '[:lower:]' '[:upper:]')"
     if printf '%s\n' "$PREFIXOS_AGRUPADOS" | grep -qx "$pfx"; then
-        printf '%s/%s' "$pfx" "$nome"
-    else
-        printf '%s' "$nome"
+        printf '%s/%s' "$pfx" "$nome"; return
     fi
+
+    # 5. raiz
+    printf '%s' "$nome"
 }
 
 # BASE = pasta-mãe deste script (mesma lógica do clone/pull/push): os
@@ -118,6 +119,8 @@ fi
 #   ./git_clone_all.sh outro-usuario ~/x/pasta    (outro dono      → pasta escolhida)
 #   ./git_clone_all.sh samirhvbr,BLUE3-ISP        (VÁRIOS donos    → BASE)
 #   ./git_clone_all.sh samirhvbr,BLUE3-ISP -n     (só mostra o plano, não clona)
+#   ./git_clone_all.sh samirhvbr,BLUE3-ISP --aprender  (regrava o repos-grupos.map
+#                                                       a partir do layout do disco)
 # Aceita VÁRIOS donos separados por vírgula. Não é luxo: o layout real abrange mais
 # de uma conta — os BLUE3-* pertencem à org BLUE3-ISP, não ao usuário pessoal, e um
 # "clona tudo do dono" com um dono só reproduz o disco pela metade, em silêncio.
@@ -143,14 +146,19 @@ repos_raw=""
 for _owner in $(printf '%s' "$OWNERS" | tr ',' ' '); do
     echo -e "${CYAN}Consultando repositórios de ${_owner}...${NC}"
     if ! _lista="$(gh repo list "$_owner" --no-archived --limit 1000 \
-        --json nameWithOwner --jq '.[].nameWithOwner')"; then
+        --json nameWithOwner,isFork --jq '.[] | "\(.nameWithOwner)\t\(.isFork)"')"; then
         echo -e "${RED}✗ Falha ao consultar repositórios de ${_owner}.${NC} O dono existe? O gh está autenticado?"
         exit 1
     fi
     [ -n "$_lista" ] && repos_raw="$repos_raw$_lista
 "
 done
-repos_raw="$(printf '%s' "$repos_raw" | grep . | sort -u || true)"
+# Separa a coluna do fork: a lista de repos fica só com owner/nome, e FORKS guarda
+# os nomes marcados. É o dado que dispensa manter lista de "o que é de terceiro".
+FORKS="$(printf '%s' "$repos_raw" | awk -F'\t' '$2=="true"{sub(/.*\//,"",$1); print $1}' | sort -u || true)"
+repos_raw="$(printf '%s' "$repos_raw" | cut -f1 | grep . | sort -u || true)"
+DONOS_LISTA="$(printf '%s' "$OWNERS" | tr ',' '\n' | grep . || true)"
+carregar_excecoes
 if [ -z "$repos_raw" ]; then
     echo -e "${YELLOW}Nenhum repositório encontrado para ${OWNERS}.${NC}"
     exit 0
@@ -172,12 +180,61 @@ PREFIXOS_AGRUPADOS="$(printf '%s\n' "$repos_raw" \
 total=$(grep -c . <<< "$repos_raw")
 echo -e "${BOLD}${total} repositórios encontrados.${NC}"
 
+# ── --aprender: grava o mapa a partir do DISCO ───────────────────────────────
+# O mapa deixa de ser escrito à mão e passa a ser gerado: varre o layout atual e
+# registra SÓ os repositórios em que as regras discordam de onde a pasta está.
+# Assim ele fica mínimo (só o genuinamente semântico, tipo KIDS/) e se auto-limpa —
+# se uma regra passa a acertar sozinha, a linha some na próxima geração.
+if [ "$APRENDER" -eq 1 ]; then
+    echo -e "${CYAN}Lendo o layout de ${DEST_DIR}...${NC}"
+    novo_mapa=""; aprendidas=0
+    while IFS= read -r repo; do
+        [ -z "$repo" ] && continue
+        nome="${repo##*/}"
+        # Onde a pasta REALMENTE está (1 ou 2 níveis).
+        atual=""
+        if [ -d "$DEST_DIR/$nome/.git" ]; then
+            atual="$nome"
+        else
+            for g in "$DEST_DIR"/*/; do
+                [ -d "$g$nome/.git" ] || continue
+                g="${g%/}"; atual="${g##*/}/$nome"; break
+            done
+        fi
+        [ -z "$atual" ] && continue          # não clonado aqui: nada a aprender
+        esperado="$(destino_de "$repo")"
+        [ "$atual" = "$esperado" ] && continue
+        grupo="${atual%/*}"
+        [ "$grupo" = "$atual" ] && grupo="-"  # está na raiz e a regra queria agrupar
+        novo_mapa="$novo_mapa$(printf '%-32s %s' "$nome" "$grupo")
+"
+        aprendidas=$((aprendidas + 1))
+        echo -e "   ${YELLOW}$nome${NC} → $grupo   (regra dizia: $esperado)"
+    done <<< "$repos_raw"
+
+    {
+        echo "# repos-grupos.map — exceções ao agrupamento automático."
+        echo "#"
+        echo "# GERADO por: ./git_clone_all.sh <donos> --aprender"
+        echo "# Não edite à mão sem necessidade: rode o --aprender depois de reorganizar"
+        echo "# as pastas e ele grava o que as regras não acertam sozinhas."
+        echo "#"
+        echo "# Formato: <REPO> <GRUPO>    ('-' = forçar raiz)"
+        echo "# Regras que dispensam entrada aqui: dono de fora e fork vão para ${GRUPO_TERCEIROS}/;"
+        echo "# 2+ repos com o mesmo início viram PREFIXO/."
+        echo ""
+        printf '%s' "$novo_mapa"
+    } > "$MAPA"
+    echo -e "\n${GREEN}✓ ${aprendidas} exceção(ões) gravada(s) em ${MAPA}${NC}"
+    exit 0
+fi
+
 ok=(); skip=(); fail=()
 
 while IFS= read -r repo; do
     [ -z "$repo" ] && continue
     nome="${repo##*/}"
-    dest="$(destino_de "$nome")"
+    dest="$(destino_de "$repo")"
     target="$DEST_DIR/$dest"
 
     if [ "$DRY_RUN" -eq 1 ]; then

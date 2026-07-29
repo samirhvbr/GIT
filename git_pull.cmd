@@ -1,11 +1,11 @@
 @echo off
 setlocal enabledelayedexpansion
-rem git_pull.cmd v1.6.0 - equivalente Windows do git_pull.sh
+rem git_pull.cmd v1.7.0 - equivalente Windows do git_pull.sh
 rem Auto-descobre os repos git sob a BASE (BASE\repo e BASE\grupo\repo)
 rem e roda "git pull --ff-only" em cada um.
 rem Texto sem acentos de proposito (compatibilidade com o code page do cmd).
 
-set "VERSION=1.6.0"
+set "VERSION=1.7.0"
 
 rem BASE = pasta-mae deste script. O .cmd fica em <BASE>\git\, entao
 rem subimos de git\ para a base. %~dp0 = pasta do script (com \ no final).
