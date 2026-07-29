@@ -10,6 +10,14 @@
 !README.md
 !README_br.md
 !git_*
+# Fonte única da versão + o sincronizador que a propaga para os 12 scripts.
+# Sem estas linhas eles ficam fora do repo e o `git status` nem os mostra — o
+# padrão "ignora tudo e libera na mão" cala arquivo novo em vez de reclamar.
+!version.md
+!CLAUDE.md
+!AGENTS.md
+!scripts/
+!scripts/**
 !.claude/
 !.continue/
 !.continue/**
