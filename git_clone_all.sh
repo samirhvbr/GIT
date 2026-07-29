@@ -31,16 +31,21 @@ VERSION="1.7.0"
 #   4. 2+ repos com o mesmo início            → PREFIXO/
 #   5. resto                                  → raiz
 #
-# As regras 2 e 3 não são chute: dos 13 repositórios no 3/ desta máquina, 7 são
+# As regras 2 e 3 não são chute: dos 13 repositórios no 000/ desta máquina, 7 são
 # forks marcados na API e 6 são clones de contas de terceiros. "Terceiro" é um dado
 # que o GitHub já responde — não precisava de lista.
+#
+# O balde chama 000/ (era 3/ até 29/07/2026, quando as pastas foram reorganizadas).
+# O nome é DEFAULT daqui: máquina nova clonada com o valor velho nasceria com um
+# 3/ que nenhuma outra máquina tem — e o run.sh, que pula o balde para nunca
+# commitar em repo de terceiro, deixaria de reconhecê-lo.
 #
 # A pasta guarda o NOME COMPLETO do repo, e não o sufixo (`SHVIA/WEB`). É decisão:
 # nem todo grupo nasce de prefixo — `KIDS/` junta MARTHINA-CLASS e RAFAELA-MEMORIA,
 # que não têm início comum. Encurtando só os que têm, o layout misturaria dois
 # estilos e o nome da pasta deixaria de dizer qual é o repositório — justamente o
 # que o git_status/pull/push mostram na tela.
-GRUPO_TERCEIROS="${GRUPO_TERCEIROS:-3}"
+GRUPO_TERCEIROS="${GRUPO_TERCEIROS:-000}"
 MAPA="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/repos-grupos.map"
 
 # Preenchidos antes do laço: nomes de repos que são fork, prefixos com 2+ repos, e

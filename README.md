@@ -38,6 +38,7 @@ git/
 ├── git_push.cmd       # push equivalent for Windows (cmd)
 ├── git_status.sh      # git status (read-only) in all repos (Linux/macOS)
 ├── git_status.cmd     # status equivalent for Windows (cmd)
+├── run.sh             # sweeps the repos and runs the house SKILLS (COMMITTER/AUDITOR)
 ├── .gitattributes     # eol=lf for *.sh, eol=crlf for *.cmd
 ├── .gitignore         # ignores everything, versions only what is in the whitelist
 ├── deploy/
@@ -61,6 +62,7 @@ git/
 | `git_push.cmd`  | Windows (cmd)| Same function as `git_push.sh`, in batch. Discovers repos in `BASE\repo` and `BASE\group\repo`. |
 | `git_status.sh` | Linux/macOS  | Auto-discovers the repos and runs `git status` **read-only** on each one: branch, commits ahead of/behind the remote and pending files. Changes nothing. Accepts folders to skip via argument. |
 | `git_status.cmd`| Windows (cmd)| Same function as `git_status.sh` (read-only), in batch. Shows branch, commits ahead/behind and pending files. |
+| `run.sh`        | Linux        | Auto-discovers the repos (same as `git_pull.sh`), filters those that **opted into a house skill** and runs its cycle. Today: COMMITTER (`.committer.yml` marker) and AUDITOR (`.auditor/config.yml`, still without a headless runner). Always skips the third-party bucket (`000/`). Accepts `--dry-run`, `--list`, `--quiet-min N` and folders to skip as arguments. This is what crontab calls — so a new repo joins the sweep by just creating the marker, with no crontab edit. |
 
 The list of repositories and their destinations is fixed only in `git_clone` (origin of each
 repo). `git_pull` and `git_push` **discover** the repositories automatically by

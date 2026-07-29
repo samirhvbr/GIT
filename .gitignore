@@ -16,6 +16,11 @@
 # Mapa de exceções do agrupamento — DADO gerado por `--aprender`, não código.
 # Versionado de propósito: é ele que faz uma máquina nova reproduzir o layout.
 !repos-grupos.map
+# Varredura das skills da casa (COMMITTER hoje, AUDITOR quando tiver executor) e
+# o marcador de opt-in deste próprio repo. Não casam com `git_*` — sem liberar
+# aqui, o padrão "ignora tudo" some com eles sem nem avisar no `git status`.
+!run.sh
+!.committer.yml
 !version.md
 !CLAUDE.md
 !AGENTS.md
