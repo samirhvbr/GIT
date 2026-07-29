@@ -1,8 +1,8 @@
 #!/bin/bash
-# pull.sh v1.5.0
+# pull.sh v1.6.0
 set -euo pipefail
 
-VERSION="1.5.0"
+VERSION="1.6.0"
 
 # BASE = pasta-mãe deste script. Os scripts ficam em ~/x/git/ e os
 # projetos um nível acima (em ~/x/), então subimos de git/ para a base.
