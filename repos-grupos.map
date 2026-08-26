@@ -5,14 +5,11 @@
 # as pastas e ele grava o que as regras não acertam sozinhas.
 #
 # Formato: <REPO> <GRUPO>    ('-' = forçar raiz)
-# Regras que dispensam entrada aqui: dono de fora e fork vão para 3/;
+# Regras que dispensam entrada aqui: dono de fora e fork vão para 000/;
 # 2+ repos com o mesmo início viram PREFIXO/.
 
-BLUE3-LINUX                      BLUE3
-BRASILEIRAO_A_2026               BLUE3
-matomo-blue3                     000
-AI-BENCHMARK                     -
-GITHUB-DESKTOP                   -
-MARTHINA-CLASS                   KIDS
-MEUIP                            BLUE3
-RAFAELA-MEMORIA                  KIDS
+CNPJ                             BLUE3
+ai-memory                        SHVIA
+ai-usagebar                      -
+pve-manager                      -
+strix                            SHVIA
