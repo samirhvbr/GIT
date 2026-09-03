@@ -31,3 +31,13 @@
 !.continue/**
 !deploy/
 !deploy/**
+
+# Publicacao de Release: o version.md desta branch no GitHub e o que as Releases
+# no GitHub refletem, e quem faz isso sao estes dois arquivos. Precisam de `!`
+# explicito — este .gitignore ignora tudo por padrao, e foi exatamente assim que
+# eles entraram no repo em silencio na primeira tentativa.
+!.github/
+!.github/workflows/
+!.github/workflows/release.yml
+!tools/
+!tools/release.sh
