@@ -1,13 +1,13 @@
 @echo off
 setlocal enabledelayedexpansion
-rem git_status.cmd v1.8.9 - equivalente Windows do git_status.sh
+rem git_status.cmd v1.8.10 - equivalente Windows do git_status.sh
 rem Verificador de status (SOMENTE LEITURA) dos repos git sob a BASE
 rem (BASE\repo e BASE\grupo\repo). Mostra o branch, commits a enviar/atras
 rem do remoto e os arquivos pendentes de commit. NAO altera nada: nao faz
 rem add, commit, pull nem push.
 rem Texto sem acentos de proposito (compatibilidade com o code page do cmd).
 
-set "VERSION=1.8.9"
+set "VERSION=1.8.10"
 
 rem BASE = pasta-mae deste script. O .cmd fica em <BASE>\git\, entao
 rem subimos de git\ para a base. %~dp0 = pasta do script (com \ no final).

@@ -1,8 +1,8 @@
 #!/bin/bash
-# pull.sh v1.8.9
+# pull.sh v1.8.10
 set -euo pipefail
 
-VERSION="1.8.9"
+VERSION="1.8.10"
 
 # BASE = pasta-mãe deste script. Os scripts ficam em ~/x/git/ e os
 # projetos um nível acima (em ~/x/), então subimos de git/ para a base.
@@ -48,7 +48,31 @@ CYAN='\033[0;36m'; BOLD='\033[1m'; NC='\033[0m'
 echo -e "${BOLD}pull.sh v${VERSION} — base: ${BASE} (${#REPOS[@]} repos)${NC}"
 [ ${#SKIP[@]} -gt 0 ] && echo -e "${YELLOW}  pulando: ${SKIP[*]}${NC}"
 
-ok=(); fail=(); skipped=()
+# Names the reason a pull failed, from git's own message. A bare "✗" said that
+# the repo failed, never WHY — and the causes that show up in practice each need
+# a different repair: a branch with no upstream, a branch deleted on the remote
+# (the local ref survives the fetch and hides it), and a diverged history are
+# three different jobs wearing the same mark.
+classify_fail() {
+    case "$1" in
+        *"no tracking information"*|*"no upstream"*)
+            echo "sem upstream" ;;
+        *"no such ref was fetched"*)
+            echo "branch apagada no remoto" ;;
+        *"Diverging branches"*|*"Not possible to fast-forward"*|*"divergent"*|*"non-fast-forward"*)
+            echo "divergiu do remoto" ;;
+        *"local changes"*|*"would be overwritten"*|*"unstaged changes"*|*"Please commit"*)
+            echo "árvore suja" ;;
+        *"Could not read from remote"*|*"unable to access"*|*"Repository not found"*|*"Permission denied"*|*"ould not resolve host"*|*"Connection"*|*"timed out"*)
+            echo "remoto inacessível" ;;
+        *"fix conflicts"*|*"CONFLICT"*)
+            echo "conflito" ;;
+        *)
+            echo "outro" ;;
+    esac
+}
+
+ok=(); fail=(); fail_reason=(); skipped=()
 
 for repo in "${REPOS[@]}"; do
     echo -e "\n${CYAN}${BOLD}── $repo${NC}"
@@ -60,21 +84,42 @@ for repo in "${REPOS[@]}"; do
 
     if ! cd "$BASE/$repo" 2>/dev/null; then
         echo -e "${RED}  ✗ Diretório não encontrado${NC}"
-        fail+=("$repo"); continue
+        fail+=("$repo"); fail_reason+=("diretório não encontrado"); continue
     fi
 
     branch=$(git branch --show-current 2>/dev/null || echo "?")
     echo -e "   branch: ${YELLOW}$branch${NC}"
 
-    if git pull --ff-only 2>&1 | sed 's/^/   /'; then
+    # The output is captured instead of streamed because classify_fail reads it.
+    # `set -e` stays suspended inside the `if` condition, so a failed pull does
+    # not abort the sweep.
+    if out=$(git pull --ff-only 2>&1); then
+        printf '%s\n' "$out" | sed 's/^/   /'
         ok+=("$repo")
     else
-        fail+=("$repo")
+        printf '%s\n' "$out" | sed 's/^/   /'
+        motivo=$(classify_fail "$out")
+        echo -e "   ${RED}✗ $motivo${NC}"
+        fail+=("$repo"); fail_reason+=("$motivo")
     fi
 done
 
 echo -e "\n${BOLD}══════════════════════════════${NC}"
 [ ${#ok[@]}      -gt 0 ] && echo -e "${GREEN}  ✓ OK:     ${ok[*]}${NC}"
-[ ${#fail[@]}    -gt 0 ] && echo -e "${RED}  ✗ Falhou: ${fail[*]}${NC}"
+if [ ${#fail[@]} -gt 0 ]; then
+    echo -e "${RED}  ✗ Falhou: ${fail[*]}${NC}"
+    # Grouped by reason: the flat list answers "which", and what is actually
+    # wanted is "which repair", which is not the same for the repos on it.
+    for motivo in "sem upstream" "branch apagada no remoto" "divergiu do remoto" \
+                  "árvore suja" "conflito" "remoto inacessível" \
+                  "diretório não encontrado" "outro"; do
+        linha=""; i=0
+        while [ $i -lt ${#fail[@]} ]; do
+            [ "${fail_reason[$i]}" = "$motivo" ] && linha="$linha ${fail[$i]}"
+            i=$((i + 1))
+        done
+        [ -n "$linha" ] && echo -e "${RED}      ${motivo}:${NC}${linha}"
+    done
+fi
 [ ${#skipped[@]} -gt 0 ] && echo -e "${YELLOW}  ↷ Pulado: ${skipped[*]}${NC}"
 echo ""

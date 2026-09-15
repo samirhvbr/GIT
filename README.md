@@ -56,8 +56,8 @@ git/
 |-----------------|--------------|-----------|
 | `git_clone.sh`  | Linux/macOS  | Clones the 17 repositories via `gh repo clone`, rebuilding the folder tree. Skips those that already have `.git`; refuses non-empty existing folders. |
 | `git_clone.cmd` | Windows (cmd)| Same function as `git_clone.sh` (also via `gh repo clone`), in batch. Text without accents for compatibility with the `cmd` code page. |
-| `git_pull.sh`   | Linux/macOS  | Auto-discovers every git repository up to 3 levels below BASE and runs `git pull --ff-only` on each one. |
-| `git_pull.cmd`  | Windows (cmd)| Same function as `git_pull.sh`, in batch. Discovers repos in `BASE\repo` and `BASE\group\repo`. |
+| `git_pull.sh`   | Linux/macOS  | Auto-discovers every git repository up to 3 levels below BASE and runs `git pull --ff-only` on each one. A failed pull is reported with its reason — no upstream, branch deleted on the remote, diverged, dirty tree, conflict, unreachable remote — and the summary groups the failures by it. |
+| `git_pull.cmd`  | Windows (cmd)| Same function as `git_pull.sh`, in batch. Discovers repos in `BASE\repo` and `BASE\group\repo`. Same report of the failure reason. |
 | `git_push.sh`   | Linux/macOS  | Auto-discovers the repos, shows the branch, warns about files with a pending commit and runs `git push` for the ready commits. |
 | `git_push.cmd`  | Windows (cmd)| Same function as `git_push.sh`, in batch. Discovers repos in `BASE\repo` and `BASE\group\repo`. |
 | `git_status.sh` | Linux/macOS  | Auto-discovers the repos and runs `git status` **read-only** on each one: branch, commits ahead of/behind the remote and pending files. Changes nothing. Accepts folders to skip via argument. |

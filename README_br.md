@@ -56,8 +56,8 @@ git/
 |-----------------|--------------|-----------|
 | `git_clone.sh`  | Linux/macOS  | Clona os 17 repositórios via `gh repo clone`, reconstruindo a árvore de pastas. Pula os que já têm `.git`; recusa pastas existentes não vazias. |
 | `git_clone.cmd` | Windows (cmd)| Mesma função do `git_clone.sh` (também via `gh repo clone`), em batch. Textos sem acento por compatibilidade com o code page do `cmd`. |
-| `git_pull.sh`   | Linux/macOS  | Auto-descobre todo repositório git até 3 níveis abaixo da BASE e roda `git pull --ff-only` em cada um. |
-| `git_pull.cmd`  | Windows (cmd)| Mesma função do `git_pull.sh`, em batch. Descobre os repos em `BASE\repo` e `BASE\grupo\repo`. |
+| `git_pull.sh`   | Linux/macOS  | Auto-descobre todo repositório git até 3 níveis abaixo da BASE e roda `git pull --ff-only` em cada um. A falha do pull sai com o motivo — sem upstream, branch apagada no remoto, divergiu, árvore suja, conflito, remoto inacessível — e o resumo agrupa as falhas por ele. |
+| `git_pull.cmd`  | Windows (cmd)| Mesma função do `git_pull.sh`, em batch. Descobre os repos em `BASE\repo` e `BASE\grupo\repo`. Mesmo relato do motivo da falha. |
 | `git_push.sh`   | Linux/macOS  | Auto-descobre os repos, mostra branch, avisa sobre arquivos com commit pendente e faz `git push` dos commits prontos. |
 | `git_push.cmd`  | Windows (cmd)| Mesma função do `git_push.sh`, em batch. Descobre os repos em `BASE\repo` e `BASE\grupo\repo`. |
 | `git_status.sh` | Linux/macOS  | Auto-descobre os repos e roda `git status` **somente leitura** em cada um: branch, commits a enviar/atrás do remoto e arquivos pendentes. Não altera nada. Aceita pastas a pular por argumento. |
