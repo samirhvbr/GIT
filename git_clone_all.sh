@@ -1,5 +1,5 @@
 #!/bin/bash
-# clone_all.sh v1.7.0
+# clone_all.sh v1.8.9
 set -euo pipefail
 
 # --dry-run/-n é filtrado ANTES de tudo: o destino sai de "$2", então a flag não
@@ -17,7 +17,7 @@ for _a in ${@+"$@"}; do
 done
 set -- ${_args[@]+"${_args[@]}"}
 
-VERSION="1.7.0"
+VERSION="1.8.9"
 
 # ── Como o destino de cada repositório é decidido ─────────────────────────────
 # A meta é NÃO precisar de manutenção manual quando a lista de repositórios muda.
