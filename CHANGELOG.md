@@ -13,6 +13,22 @@ never rewritten.
 > reconstructing them now would produce a plausible history rather than a true
 > one.
 
+## 1.8.13 - status.cmd names the missing upstream, as status.sh already did
+
+Parity is a contract here, and this pair had drifted. `git_status.sh` prints
+`sem upstream configurado`; `git_status.cmd` ran the two `rev-list` calls,
+watched both fail, kept `ahead=0` and `behind=0` and printed nothing — so a
+branch that was never connected to a remote looked exactly like a branch in
+sync with one. On Windows, the read-only checker was quietest about the repo
+it had the least information on.
+
+It now asks `git rev-parse @{u}` first, says `sem upstream configurado` when
+there is none, and only counts ahead/behind when there is. The `behind` line
+also names the upstream, the way the `.sh` does.
+
+**Not executed: there is no Windows on this machine.** The `.sh` side is
+unchanged and was already correct.
+
 ## 1.8.12 - push stops aborting the sweep at the first repo without upstream
 
 `git_push.sh` asked how many commits were waiting with
