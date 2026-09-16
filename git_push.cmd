@@ -1,12 +1,12 @@
 @echo off
 setlocal enabledelayedexpansion
-rem git_push.cmd v1.8.11 - equivalente Windows do git_push.sh
+rem git_push.cmd v1.8.12 - equivalente Windows do git_push.sh
 rem Auto-descobre os repos git sob a BASE (BASE\repo e BASE\grupo\repo),
 rem mostra o branch, avisa sobre arquivos com commit pendente e faz
 rem "git push" dos commits prontos.
 rem Texto sem acentos de proposito (compatibilidade com o code page do cmd).
 
-set "VERSION=1.8.11"
+set "VERSION=1.8.12"
 
 rem BASE = pasta-mae deste script. O .cmd fica em <BASE>\git\, entao
 rem subimos de git\ para a base. %~dp0 = pasta do script (com \ no final).
@@ -21,6 +21,7 @@ echo.
 set /a OK=0, FAIL=0
 set "OKLIST="
 set "WARNLIST="
+set "NOUPSLIST="
 set "FAILLIST="
 
 rem Nivel 1: BASE\repo. Se nao for repo, olha um nivel abaixo (BASE\grupo\repo).
@@ -39,6 +40,7 @@ echo ==============================
 echo   OK: %OK%   Falhou: %FAIL%
 if defined OKLIST   echo   OK:       %OKLIST%
 if defined WARNLIST echo   Commitar: %WARNLIST%
+if defined NOUPSLIST echo   Sem upstream: %NOUPSLIST%
 if defined FAILLIST echo   Falhou:   %FAILLIST%
 echo.
 pause
@@ -62,7 +64,24 @@ if not "!dirty!"=="0" (
     set "WARNLIST=!WARNLIST! !rel!"
 )
 
-rem Commits prontos para push (vazio/sem upstream conta como 0)
+rem Sem upstream nao existe "quantos commits faltam enviar". O `git log @{u}..`
+rem falha, o `find /c` conta zero e o repo entrava na lista verde como se
+rem estivesse em dia - justamente no caso em que o push mais importa: commit
+rem local sem para onde ir. O lado .sh morria aqui (set -e sobre o pipefail);
+rem este lado mentia. Os dois erravam o mesmo caso, de jeitos diferentes.
+set "upstream="
+for /f "delims=" %%u in ('git rev-parse --abbrev-ref --symbolic-full-name @{u} 2^>nul') do set "upstream=%%u"
+if not defined upstream (
+    set "locais=0"
+    for /f %%c in ('git rev-list --count HEAD 2^>nul') do set "locais=%%c"
+    echo    [x] sem upstream - !locais! commit^(s^) sem para onde ir
+    echo       conserto: git push -u origin !branch!
+    set /a FAIL+=1
+    set "NOUPSLIST=!NOUPSLIST! !rel!"
+    exit /b 0
+)
+
+rem Commits prontos para push
 set "pending=0"
 for /f %%c in ('git log @{u}.. --oneline 2^>nul ^| find /c /v ""') do set "pending=%%c"
 if "!pending!"=="0" (

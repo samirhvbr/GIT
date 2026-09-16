@@ -1,8 +1,8 @@
 #!/bin/bash
-# push.sh v1.8.11
+# push.sh v1.8.12
 set -euo pipefail
 
-VERSION="1.8.11"
+VERSION="1.8.12"
 
 # BASE = pasta-mãe deste script. Os scripts ficam em ~/x/git/ e os
 # projetos um nível acima (em ~/x/), então subimos de git/ para a base.
@@ -48,7 +48,7 @@ CYAN='\033[0;36m'; BOLD='\033[1m'; NC='\033[0m'
 echo -e "${BOLD}push.sh v${VERSION} — base: ${BASE} (${#REPOS[@]} repos)${NC}"
 [ ${#SKIP[@]} -gt 0 ] && echo -e "${YELLOW}  pulando: ${SKIP[*]}${NC}"
 
-ok=(); warn=(); fail=(); skipped=()
+ok=(); warn=(); fail=(); noups=(); skipped=()
 
 for repo in "${REPOS[@]}"; do
     echo -e "\n${CYAN}${BOLD}── $repo${NC}"
@@ -73,6 +73,23 @@ for repo in "${REPOS[@]}"; do
         warn+=("$repo")
     fi
 
+    # Without an upstream there is no answer to "how many commits are left to
+    # send" — and asking kills the sweep. `git log '@{u}..'` exits non-zero,
+    # `pipefail` carries that through `wc`/`tr`, the assignment inherits it and
+    # `set -e` ends the script right there: no summary, no reason on screen, and
+    # every repository after this one in the listing never gets pushed.
+    #
+    # Reporting it is the other half. A branch with commits and nowhere to send
+    # them is the case where a push matters MOST, and it was landing in the
+    # green list as "up-to-date". git_status.sh has told this case apart since
+    # 1.5.1; the push never did.
+    if ! git rev-parse --abbrev-ref --symbolic-full-name '@{u}' >/dev/null 2>&1; then
+        locais=$(git rev-list --count HEAD 2>/dev/null || echo 0)
+        echo -e "   ${RED}${BOLD}✗ sem upstream${NC}${RED} — $locais commit(s) sem para onde ir${NC}"
+        echo -e "      ${YELLOW}conserto: git push -u origin ${branch:-<branch>}${NC}"
+        noups+=("$repo"); continue
+    fi
+
     # Commits prontos para push
     pending=$(git log '@{u}..' --oneline 2>/dev/null | wc -l | tr -d ' ')
     if [ "$pending" -eq 0 ]; then
@@ -91,6 +108,7 @@ done
 echo -e "\n${BOLD}══════════════════════════════${NC}"
 [ ${#ok[@]}      -gt 0 ] && echo -e "${GREEN}  ✓ OK:       ${ok[*]}${NC}"
 [ ${#warn[@]}    -gt 0 ] && echo -e "${YELLOW}  ⚠ Commitar: ${warn[*]}${NC}"
+[ ${#noups[@]}   -gt 0 ] && echo -e "${RED}  ✗ Sem upstream: ${noups[*]}${NC}"
 [ ${#fail[@]}    -gt 0 ] && echo -e "${RED}  ✗ Falhou:   ${fail[*]}${NC}"
 [ ${#skipped[@]} -gt 0 ] && echo -e "${YELLOW}  ↷ Pulado:   ${skipped[*]}${NC}"
 echo ""

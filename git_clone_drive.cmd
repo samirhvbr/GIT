@@ -1,10 +1,10 @@
 @echo off
 setlocal
-rem clone_drive.cmd v1.8.11 - equivalente Windows do git_clone_drive.sh
+rem clone_drive.cmd v1.8.12 - equivalente Windows do git_clone_drive.sh
 rem Reconstroi o espelho do Nextcloud em DRIVE\ (clona nextcloud\* oficial).
 rem Texto sem acentos de proposito (compatibilidade com o code page do cmd).
 
-set "VERSION=1.8.11"
+set "VERSION=1.8.12"
 
 rem BASE = pasta-mae deste script. O .cmd fica em <BASE>\git\, entao
 rem subimos de git\ para a base. %~dp0 = pasta do script (com \ no final).
