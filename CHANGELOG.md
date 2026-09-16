@@ -13,6 +13,70 @@ never rewritten.
 > reconstructing them now would produce a plausible history rather than a true
 > one.
 
+## 1.9.0 - pull, push and status choose repositories with -d and -i
+
+Same version as the rename above: one delivery, split into the block that moves
+files and the block that adds behaviour.
+
+`-d DIR` leaves `DIR` out and everything under it. `-i DIR` runs **only** on
+`DIR` and what is under it. `-h` prints the usage.
+
+A flag stays in force for every word that follows it until another flag
+appears, so `-d 000 001` and `-d 000 -d 001` say the same thing. That is the
+whole reason for the rule: there is no form to memorise, and neither spelling
+is an error. A bare word with no flag at all is still an exclusion — the
+behaviour the scripts always had — so anything already in a crontab keeps
+working untouched.
+
+`DIR` matches by path (`BLUE3/CNPJ`), by final name (`CNPJ`) or by parent
+folder (`BLUE3` reaches everything under `BLUE3/`). That is the matching rule
+the old positional skip already used; `-i` reads it the same way, so the two
+flags never disagree about what "that one" means.
+
+## Why the two cuts are reported differently
+
+`-i` filters **before** the sweep and says nothing per repository, only a count
+in the banner. `-d` filters **inside** it and prints `↷ pulado (-d)` under each
+repository it drops.
+
+It is not lost symmetry. On this machine the sweep finds 114 repositories:
+`-i BLUE3` would open with a hundred lines of *pulado* before the first useful
+one. `-d` names repositories one at a time, and whoever typed it wants the
+exclusion confirmed on screen.
+
+An argument that reaches no repository is warned about. The two modes fail
+silently in opposite directions — a mistyped `-d` touches exactly what was
+meant to stay out, and a mistyped `-i` empties the whole sweep without saying
+why — and neither failure announces itself.
+
+## The Windows side, which had no arguments at all
+
+`pull.cmd`, `push.cmd` and `status.cmd` read **no argument whatsoever** before
+this. The skip list was documented in the `.sh` and in the README, and someone
+running on Windows believed they had the behaviour they had read about. A
+divergent pair is worse than a missing feature, so the flags are born on both
+sides in the same commit.
+
+The three `.cmd` files gained a parser (`:parse`), a two-pass discovery — find
+everything, then select — and `:casa`, `:avisa`, `:seleciona` and `:usage`.
+Two implementation differences from the `.sh`, both forced: lists are
+semicolon-separated strings because `cmd` has no arrays, and `:casa` reads the
+parent folder as "the group part of the path" because the discovery is at most
+two levels deep, which makes the two definitions equivalent here.
+
+**Verified on Linux**, on a built tree of eight repositories shaped like the
+real one (groups `000/`, `BLUE3/`, `B3DEV/`, `KIDS/` plus loose repos):
+no flag, `-d 000`, `-d 000 -d B3DEV`, `-d 000 B3DEV`, the bare `000 B3DEV`,
+`-i 000`, `-i BLUE3 -d BLUE3/CNPJ`, `-i BLUE3/MEUIP`, `-i CNPJ`, `-i 001`
+(warns, exits 1), `-d 001` (warns, continues), `-x` (exit 2), `-h`, and
+`-d BLUE3/ -d ./AREA81` for the trailing-slash and `./` forms. Then against the
+real base of 114 repositories with `status.sh`, which is read-only.
+
+**The `.cmd` files were not executed: there is no Windows on this machine.**
+They were checked statically instead — every `goto`/`call` target resolves, and
+block parentheses balance — and every `echo` with parentheses or `!` was
+written with the escaping the rest of these files already uses.
+
 ## 1.9.0 - the scripts drop the git_ prefix and take the name of what they do
 
 `./git_pull.sh` becomes `./pull.sh`, and the same for push, status, clone,

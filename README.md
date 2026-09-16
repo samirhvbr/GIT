@@ -56,17 +56,62 @@ git/
 |-----------------|--------------|-----------|
 | `clone.sh`  | Linux/macOS  | Clones the 17 repositories via `gh repo clone`, rebuilding the folder tree. Skips those that already have `.git`; refuses non-empty existing folders. |
 | `clone.cmd` | Windows (cmd)| Same function as `clone.sh` (also via `gh repo clone`), in batch. Text without accents for compatibility with the `cmd` code page. |
-| `pull.sh`   | Linux/macOS  | Auto-discovers every git repository up to 3 levels below BASE and runs `git pull --ff-only` on each one. A failed pull is reported with its reason — no upstream, branch deleted on the remote, diverged, dirty tree, conflict, unreachable remote — and the summary groups the failures by it. |
-| `pull.cmd`  | Windows (cmd)| Same function as `pull.sh`, in batch. Discovers repos in `BASE\repo` and `BASE\group\repo`. Same report of the failure reason. |
-| `push.sh`   | Linux/macOS  | Auto-discovers the repos, shows the branch, warns about files with a pending commit and runs `git push` for the ready commits. |
-| `push.cmd`  | Windows (cmd)| Same function as `push.sh`, in batch. Discovers repos in `BASE\repo` and `BASE\group\repo`. |
-| `status.sh` | Linux/macOS  | Auto-discovers the repos and runs `git status` **read-only** on each one: branch, commits ahead of/behind the remote and pending files. Changes nothing. Accepts folders to skip via argument. |
-| `status.cmd`| Windows (cmd)| Same function as `status.sh` (read-only), in batch. Shows branch, commits ahead/behind and pending files. |
+| `pull.sh`   | Linux/macOS  | Auto-discovers every git repository up to 3 levels below BASE and runs `git pull --ff-only` on each one. Takes `-d`/`-i`. A failed pull is reported with its reason — no upstream, branch deleted on the remote, diverged, dirty tree, conflict, unreachable remote — and the summary groups the failures by it. |
+| `pull.cmd`  | Windows (cmd)| Same function as `pull.sh`, in batch, `-d`/`-i` included. Discovers repos in `BASE\repo` and `BASE\group\repo`. Same report of the failure reason. |
+| `push.sh`   | Linux/macOS  | Auto-discovers the repos, shows the branch, warns about files with a pending commit and runs `git push` for the ready commits. A branch with no upstream is reported with its repair, not counted as up to date. Takes `-d`/`-i`. |
+| `push.cmd`  | Windows (cmd)| Same function as `push.sh`, in batch, `-d`/`-i` included. Discovers repos in `BASE\repo` and `BASE\group\repo`. |
+| `status.sh` | Linux/macOS  | Auto-discovers the repos and runs `git status` **read-only** on each one: branch, commits ahead of/behind the remote and pending files. Changes nothing. Takes `-d`/`-i` (see above). |
+| `status.cmd`| Windows (cmd)| Same function as `status.sh` (read-only), in batch, `-d`/`-i` included. Shows branch, commits ahead/behind and pending files. |
 | `run.sh`        | Linux        | Auto-discovers the repos (same as `pull.sh`), filters those that **opted into a house skill** and runs its cycle. Today: COMMITTER (`.committer.yml` marker) and AUDITOR (`.auditor/config.yml`, still without a headless runner). Always skips the third-party bucket (`000/`). Accepts `--dry-run`, `--list`, `--quiet-min N` and folders to skip as arguments. This is what crontab calls — so a new repo joins the sweep by just creating the marker, with no crontab edit. |
 
 The list of repositories and their destinations is fixed only in `clone` (origin of each
 repo). `pull` and `push` **discover** the repositories automatically by
 scanning BASE, so they always reflect the folders present at the time.
+
+## Choosing repositories: `-d` and `-i`
+
+`pull`, `push` and `status` take the same two flags, on both platforms:
+
+| flag | meaning |
+|---|---|
+| `-d DIR` (`--exclude`) | leave `DIR` out, and everything under it |
+| `-i DIR` (`--only`)    | run **only** on `DIR`, and on what is under it |
+| `-h` (`--help`)        | usage |
+
+A flag stays in force for every word that follows it until another flag
+appears, so `-d 000 001` and `-d 000 -d 001` say the same thing — there is no
+form to memorise. A bare word with no flag at all is an exclusion, which is how
+the scripts have always behaved: anything already in a crontab keeps working
+untouched.
+
+`DIR` matches by path (`BLUE3/CNPJ`), by final name (`CNPJ`) or by parent
+folder (`BLUE3` reaches everything under `BLUE3/`).
+
+```bash
+./pull.sh -d 000                    # everything except the third-party bucket
+./pull.sh -d 000 -d B3DEV           # everything except those two
+./pull.sh -i BLUE3                  # only the ones under BLUE3/
+./pull.sh -i BLUE3 -d BLUE3/CNPJ    # only BLUE3/, minus CNPJ
+./push.sh 000                       # still works: a bare word excludes
+```
+
+```bat
+:: Windows — identical
+pull.cmd -d 000 -d B3DEV
+pull.cmd -i BLUE3 -d BLUE3\CNPJ
+```
+
+The two cuts are reported differently on purpose. `-i` filters before the
+sweep, silently, and the banner says how many repositories it left out —
+`-i BLUE3` on a base of a hundred repositories would otherwise print a hundred
+"skipped" lines before the first useful one. `-d` filters inside the sweep and
+prints `↷ pulado (-d)` under each repository it drops, because that is a
+decision taken repo by repo and worth seeing confirmed.
+
+An argument that reaches no repository is reported as a warning: the two modes
+fail silently in opposite directions — a mistyped `-d` touches exactly what was
+meant to stay out, and a mistyped `-i` empties the whole sweep without saying
+why.
 
 ## Usage
 

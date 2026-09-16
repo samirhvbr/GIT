@@ -56,17 +56,61 @@ git/
 |-----------------|--------------|-----------|
 | `clone.sh`  | Linux/macOS  | Clona os 17 repositórios via `gh repo clone`, reconstruindo a árvore de pastas. Pula os que já têm `.git`; recusa pastas existentes não vazias. |
 | `clone.cmd` | Windows (cmd)| Mesma função do `clone.sh` (também via `gh repo clone`), em batch. Textos sem acento por compatibilidade com o code page do `cmd`. |
-| `pull.sh`   | Linux/macOS  | Auto-descobre todo repositório git até 3 níveis abaixo da BASE e roda `git pull --ff-only` em cada um. A falha do pull sai com o motivo — sem upstream, branch apagada no remoto, divergiu, árvore suja, conflito, remoto inacessível — e o resumo agrupa as falhas por ele. |
-| `pull.cmd`  | Windows (cmd)| Mesma função do `pull.sh`, em batch. Descobre os repos em `BASE\repo` e `BASE\grupo\repo`. Mesmo relato do motivo da falha. |
-| `push.sh`   | Linux/macOS  | Auto-descobre os repos, mostra branch, avisa sobre arquivos com commit pendente e faz `git push` dos commits prontos. |
-| `push.cmd`  | Windows (cmd)| Mesma função do `push.sh`, em batch. Descobre os repos em `BASE\repo` e `BASE\grupo\repo`. |
-| `status.sh` | Linux/macOS  | Auto-descobre os repos e roda `git status` **somente leitura** em cada um: branch, commits a enviar/atrás do remoto e arquivos pendentes. Não altera nada. Aceita pastas a pular por argumento. |
-| `status.cmd`| Windows (cmd)| Mesma função do `status.sh` (somente leitura), em batch. Mostra branch, commits a enviar/atrás e arquivos pendentes. |
+| `pull.sh`   | Linux/macOS  | Auto-descobre todo repositório git até 3 níveis abaixo da BASE e roda `git pull --ff-only` em cada um. Aceita `-d`/`-i`. A falha do pull sai com o motivo — sem upstream, branch apagada no remoto, divergiu, árvore suja, conflito, remoto inacessível — e o resumo agrupa as falhas por ele. |
+| `pull.cmd`  | Windows (cmd)| Mesma função do `pull.sh`, em batch, `-d`/`-i` inclusive. Descobre os repos em `BASE\repo` e `BASE\grupo\repo`. Mesmo relato do motivo da falha. |
+| `push.sh`   | Linux/macOS  | Auto-descobre os repos, mostra branch, avisa sobre arquivos com commit pendente e faz `git push` dos commits prontos. Branch sem upstream sai com o conserto, e não contada como em dia. Aceita `-d`/`-i`. |
+| `push.cmd`  | Windows (cmd)| Mesma função do `push.sh`, em batch, `-d`/`-i` inclusive. Descobre os repos em `BASE\repo` e `BASE\grupo\repo`. |
+| `status.sh` | Linux/macOS  | Auto-descobre os repos e roda `git status` **somente leitura** em cada um: branch, commits a enviar/atrás do remoto e arquivos pendentes. Não altera nada. Aceita `-d`/`-i` (ver acima). |
+| `status.cmd`| Windows (cmd)| Mesma função do `status.sh` (somente leitura), em batch, `-d`/`-i` inclusive. Mostra branch, commits a enviar/atrás e arquivos pendentes. |
 | `run.sh`        | Linux        | Auto-descobre os repos (igual ao `pull.sh`), filtra os que **optaram por uma skill da casa** e roda o ciclo dela. Hoje: COMMITTER (marcador `.committer.yml`) e AUDITOR (`.auditor/config.yml`, ainda sem executor headless). Pula o balde de terceiros (`000/`) sempre. Aceita `--dry-run`, `--list`, `--quiet-min N` e pastas a pular por argumento. É o que a crontab chama — assim repo novo entra na varredura só criando o marcador, sem editar a crontab. |
 
 A lista de repositórios e seus destinos é fixa só no `clone` (origin de cada
 repo). `pull` e `push` **descobrem** os repositórios automaticamente
 varrendo a BASE, então refletem sempre as pastas presentes no momento.
+
+## Escolhendo repositórios: `-d` e `-i`
+
+`pull`, `push` e `status` aceitam as mesmas duas flags, nas duas plataformas:
+
+| flag | o que faz |
+|---|---|
+| `-d DIR` (`--exclude`) | deixa `DIR` de fora, e tudo que estiver sob ele |
+| `-i DIR` (`--only`)    | roda **só** em `DIR`, e no que estiver sob ele |
+| `-h` (`--help`)        | ajuda |
+
+A flag vale para todas as palavras seguintes até aparecer outra, então
+`-d 000 001` e `-d 000 -d 001` dizem a mesma coisa — não há forma a decorar.
+Palavra solta, sem flag nenhuma, é exclusão, que é como os scripts sempre
+funcionaram: o que já está na crontab continua valendo sem edição.
+
+`DIR` casa pelo caminho (`BLUE3/CNPJ`), pelo nome final (`CNPJ`) ou pela
+pasta-mãe (`BLUE3` alcança tudo que estiver sob `BLUE3/`).
+
+```bash
+./pull.sh -d 000                    # todos, menos o balde de terceiros
+./pull.sh -d 000 -d B3DEV           # todos, menos os dois
+./pull.sh -i BLUE3                  # só os de BLUE3/
+./pull.sh -i BLUE3 -d BLUE3/CNPJ    # só BLUE3/, menos o CNPJ
+./push.sh 000                       # continua valendo: palavra solta exclui
+```
+
+```bat
+:: Windows — igual
+pull.cmd -d 000 -d B3DEV
+pull.cmd -i BLUE3 -d BLUE3\CNPJ
+```
+
+Os dois cortes aparecem de jeitos diferentes de propósito. O `-i` filtra antes
+da varredura, em silêncio, e o cabeçalho diz quantos ficaram de fora — um
+`-i BLUE3` numa base de cem repositórios imprimiria cem linhas de "pulado"
+antes da primeira linha útil. O `-d` filtra dentro da varredura e escreve
+`↷ pulado (-d)` sob cada repositório que derruba, porque essa é uma decisão
+tomada repo a repo e que vale ver confirmada.
+
+Argumento que não alcança repositório nenhum vira aviso: os dois modos erram em
+silêncio em direções opostas — um `-d` digitado errado mexe justamente no que
+era para ficar de fora, e um `-i` digitado errado zera a varredura inteira sem
+dizer por quê.
 
 ## Uso
 
