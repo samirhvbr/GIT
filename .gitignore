@@ -1,43 +1,33 @@
-# 1) Ignora tudo
-*
+# Este arquivo ignorava TUDO (`*`) e liberava na mão, um `!` por vez. O padrão
+# nasceu quando o repo dividia pasta com trabalho solto; hoje ele só contém os
+# próprios arquivos, e o que restava do padrão era o efeito colateral — arquivo
+# novo não entrava e o `git status` não reclamava. Some em silêncio.
+#
+# Medido aqui em 16/09/2026, fora do versionamento sem ninguém saber:
+#   CHANGELOG.md                 o arquivo que a COMMIT-RULE manda escrever
+#                                ANTES do commit, e cujo `##` É o subject:
+#                                não existia para quem clonasse o repo
+#   tools/git-hooks/commit-msg   o hook que valida o subject
+#   tools/git-hooks/pre-push     o hook que valida a versão contra o remoto
+#
+# E mais o que ainda não tinha sido tentado: `docs/`, qualquer `.md` novo na
+# raiz, qualquer arquivo novo em `.claude/` e qualquer workflow novo em
+# `.github/workflows/` — todos seriam engolidos do mesmo jeito.
+#
+# Agora vale o padrão normal: versiona tudo, ignora só o que está nomeado
+# abaixo. Arquivo que não deve entrar precisa de uma linha aqui, com o motivo —
+# que é a troca certa: o custo passa a ser esquecer de ignorar, e não esquecer
+# de versionar. O primeiro aparece no `git status`; o segundo não aparece nunca.
 
-# 2) Mas NÃO ignora os diretórios (senão o git nem entra neles)
-#!*/
+# Resíduo do scripts/sync-version.sh se ele for interrompido no meio da escrita.
+*.tmp-sync
 
-# 3) Agora libera o que tu quer versionar
-!.gitignore
-!.gitattributes
-!README.md
-!README_br.md
-!git_*
-# Fonte única da versão + o sincronizador que a propaga para os 12 scripts.
-# Sem estas linhas eles ficam fora do repo e o `git status` nem os mostra — o
-# padrão "ignora tudo e libera na mão" cala arquivo novo em vez de reclamar.
-# Mapa de exceções do agrupamento — DADO gerado por `--aprender`, não código.
-# Versionado de propósito: é ele que faz uma máquina nova reproduzir o layout.
-!repos-grupos.map
-# Varredura das skills da casa (COMMITTER hoje, AUDITOR quando tiver executor) e
-# o marcador de opt-in deste próprio repo. Não casam com `git_*` — sem liberar
-# aqui, o padrão "ignora tudo" some com eles sem nem avisar no `git status`.
-!run.sh
-!.committer.yml
-!version.md
-!CLAUDE.md
-!AGENTS.md
-!scripts/
-!scripts/**
-!.claude/
-!.continue/
-!.continue/**
-!deploy/
-!deploy/**
+# Configuração por máquina, por definição. O settings.json compartilhado entra.
+.claude/settings.local.json
 
-# Publicacao de Release: o version.md desta branch no GitHub e o que as Releases
-# no GitHub refletem, e quem faz isso sao estes dois arquivos. Precisam de `!`
-# explicito — este .gitignore ignora tudo por padrao, e foi exatamente assim que
-# eles entraram no repo em silencio na primeira tentativa.
-!.github/
-!.github/workflows/
-!.github/workflows/release.yml
-!tools/
-!tools/release.sh
+# Estado de sessão da skill loop-work, não conteúdo do repositório.
+.loop/
+
+# Lixo de sistema operacional
+.DS_Store
+Thumbs.db

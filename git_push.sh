@@ -1,8 +1,8 @@
 #!/bin/bash
-# push.sh v1.8.10
+# push.sh v1.8.11
 set -euo pipefail
 
-VERSION="1.8.10"
+VERSION="1.8.11"
 
 # BASE = pasta-mãe deste script. Os scripts ficam em ~/x/git/ e os
 # projetos um nível acima (em ~/x/), então subimos de git/ para a base.

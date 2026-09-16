@@ -1,11 +1,11 @@
 @echo off
 setlocal
-rem clone.cmd v1.8.10 - equivalente Windows do git_clone.sh
+rem clone.cmd v1.8.11 - equivalente Windows do git_clone.sh
 rem Clona os 17 repositorios via GitHub CLI (gh), reconstruindo a estrutura de pastas.
 rem gh usa a auth do proprio gh (sem pedir usuario/senha) - igual no Windows e no Linux.
 rem Texto sem acentos de proposito (compatibilidade com o code page do cmd).
 
-set "VERSION=1.8.10"
+set "VERSION=1.8.11"
 
 rem BASE = pasta-mae deste script. O .cmd fica em <BASE>\git\, entao
 rem subimos de git\ para a base. %~dp0 = pasta do script (com \ no final).
