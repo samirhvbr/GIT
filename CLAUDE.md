@@ -51,7 +51,7 @@ Cada script tinha a sua: em 28/07/2026 o `git_pull.sh` estava 1.4.0 e o
 Windows não tinha como saber se o script dele já tinha a correção que o irmão
 recebeu, porque o número não queria dizer a mesma coisa dos dois lados.
 
-Com o `version.md`, `git_pull.cmd v1.5.0` e `git_pull.sh v1.5.0` significam "saíram da
+Com o `version.md`, `pull.cmd v1.9.0` e `pull.sh v1.9.0` significam "saíram da
 mesma release" — que é a pergunta que se faz de verdade. A evolução de uma ferramenta
 isolada vive no `git log`.
 
@@ -86,15 +86,15 @@ uma regressão silenciosa (o script roda, reporta menos repos, e ninguém perceb
 
 ## Cuidado especial: os scripts que ESCREVEM
 
-`git_status.sh` é somente leitura. `git_pull`/`git_push` alteram repositórios de
-terceiros na máquina, e `git_clone*` cria árvore de diretórios.
+`status.sh` é somente leitura. `pull`/`push` alteram repositórios de
+terceiros na máquina, e `clone*` cria árvore de diretórios.
 
 - Nunca faça um script **descartar** trabalho local (`reset --hard`, `clean -xdf`,
   `checkout --force`) sem flag explícita e aviso na tela.
-- `git_clone.sh` tem a lista `OWNER/REPO|PASTA_DESTINO`, que **define** o layout
+- `clone.sh` tem a lista `OWNER/REPO|PASTA_DESTINO`, que **define** o layout
   agrupado. Ela precisa acompanhar a organização real — lista desatualizada recria a
   estrutura antiga em máquina nova.
-- `git_clone_all.sh` clona **tudo do dono, achatado** (`dest="${repo##*/}"`). Ele é
+- `clone_all.sh` clona **tudo do dono, achatado** (`dest="${repo##*/}"`). Ele é
   para inventário/bootstrap, não para reproduzir a organização por grupo.
 
 ---

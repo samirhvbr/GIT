@@ -1,5 +1,5 @@
 #!/bin/bash
-# git_status.sh v1.8.13
+# status.sh v1.9.0
 # ------------------------------------------------------------------
 # Verificador de status (SOMENTE LEITURA) dos repositórios sob ~/x/.
 #
@@ -9,7 +9,7 @@
 # nada: não faz add, commit, pull nem push.
 set -euo pipefail
 
-VERSION="1.8.13"
+VERSION="1.9.0"
 
 # BASE = pasta-mãe deste script. Os scripts ficam em ~/x/git/ e os
 # projetos um nível acima (em ~/x/), então subimos de git/ para a base.
@@ -30,9 +30,9 @@ if [ ${#REPOS[@]} -eq 0 ]; then
 fi
 
 # Repositórios a PULAR: passados como argumentos na linha de comando.
-# Ex: ./git_status.sh odysseus        → checa todos, menos odysseus
-#     ./git_status.sh odysseus blue3  → pula as duas pastas
-#     ./git_status.sh DRIVE           → pula TUDO sob DRIVE/ (subárvore inteira)
+# Ex: ./status.sh odysseus        → checa todos, menos odysseus
+#     ./status.sh odysseus blue3  → pula as duas pastas
+#     ./status.sh DRIVE           → pula TUDO sob DRIVE/ (subárvore inteira)
 # Casa o caminho exato (grupo/odysseus), o nome final (odysseus)
 # ou uma pasta-ancestral (DRIVE pula DRIVE/ANDROID, DRIVE/IOS, ...).
 SKIP=("$@")
@@ -52,7 +52,7 @@ should_skip() {
 GREEN='\033[0;32m'; RED='\033[0;31m'; YELLOW='\033[1;33m'
 CYAN='\033[0;36m'; BOLD='\033[1m'; NC='\033[0m'
 
-echo -e "${BOLD}git_status.sh v${VERSION} — base: ${BASE} (${#REPOS[@]} repos)${NC}"
+echo -e "${BOLD}status.sh v${VERSION} — base: ${BASE} (${#REPOS[@]} repos)${NC}"
 [ ${#SKIP[@]} -gt 0 ] && echo -e "${YELLOW}  pulando: ${SKIP[*]}${NC}"
 
 clean=(); dirty=(); skipped=(); fail=()

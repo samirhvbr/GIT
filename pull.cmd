@@ -1,11 +1,11 @@
 @echo off
 setlocal enabledelayedexpansion
-rem git_pull.cmd v1.8.13 - equivalente Windows do git_pull.sh
+rem pull.cmd v1.9.0 - equivalente Windows do pull.sh
 rem Auto-descobre os repos git sob a BASE (BASE\repo e BASE\grupo\repo)
 rem e roda "git pull --ff-only" em cada um.
 rem Texto sem acentos de proposito (compatibilidade com o code page do cmd).
 
-set "VERSION=1.8.13"
+set "VERSION=1.9.0"
 
 rem BASE = pasta-mae deste script. O .cmd fica em <BASE>\git\, entao
 rem subimos de git\ para a base. %~dp0 = pasta do script (com \ no final).
@@ -14,7 +14,7 @@ set "SCRIPT_DIR=%SCRIPT_DIR:~0,-1%"
 for %%I in ("%SCRIPT_DIR%") do set "BASE=%%~dpI"
 set "BASE=%BASE:~0,-1%"
 
-echo git_pull.cmd v%VERSION% - base: %BASE%
+echo pull.cmd v%VERSION% - base: %BASE%
 echo.
 
 set /a OK=0, FAIL=0
@@ -33,7 +33,7 @@ set "MOT_REMOTO="
 set "MOT_OUTRO="
 
 rem git's output goes to a file so that :classify can read it back.
-set "TMPOUT=%TEMP%\git_pull_%RANDOM%%RANDOM%.txt"
+set "TMPOUT=%TEMP%\pull_%RANDOM%%RANDOM%.txt"
 
 rem Nivel 1: BASE\repo. Se nao for repo, olha um nivel abaixo (BASE\grupo\repo).
 for /d %%D in ("%BASE%\*") do (

@@ -1,26 +1,26 @@
 #!/bin/bash
-# run.sh v1.8.13 — varredura das SKILLS da casa sobre todos os repos de ~/x
+# run.sh v1.9.0 — varredura das SKILLS da casa sobre todos os repos de ~/x
 #
 # Por que existe: o ciclo do COMMITTER recebe os repos por argumento, então a linha
 # de cron acabava com uma lista fixa de caminhos — a skill só rodava onde o cron
 # apontava, e cada repo novo exigia editar a crontab. Aqui a lista é DESCOBERTA a
-# cada disparo, do mesmo jeito que o git_pull.sh descobre os repos para o pull.
+# cada disparo, do mesmo jeito que o pull.sh descobre os repos para o pull.
 #
 # Quem participa continua sendo decisão do repo, não deste script (SPEC §1.1 do
 # COMMITTER): varremos ~/x inteiro, mas só entra no ciclo quem tem o MARCADOR na
 # raiz. Sem marcador, o repo não existe para a skill.
 set -euo pipefail
 
-VERSION="1.8.13"
+VERSION="1.9.0"
 
-# BASE = pasta-mãe deste script (~/x), igual ao git_pull.sh.
+# BASE = pasta-mãe deste script (~/x), igual ao pull.sh.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BASE="$(dirname "$SCRIPT_DIR")"
 SKILLS_DIR="$BASE/SKILLS"
 
 COMMITTER_CYCLE="$SKILLS_DIR/skill-COMMITTER/skill/committer/committer_cycle.py"
 
-# Balde de terceiros — mesmo default do git_clone_all.sh. NUNCA entra na varredura:
+# Balde de terceiros — mesmo default do clone_all.sh. NUNCA entra na varredura:
 # repo de terceiro não recebe commit automático nosso, nem por marcador esquecido.
 GRUPO_TERCEIROS="${GRUPO_TERCEIROS:-000}"
 
@@ -33,7 +33,7 @@ uso: ./run.sh [opções] [repos-a-pular...]
   --list           só lista quem participa e sai
   -h, --help       esta ajuda
 
-Pular repos funciona como no git_pull.sh: caminho (SHVIA/SHVIA-WEB), nome final
+Pular repos funciona como no pull.sh: caminho (SHVIA/SHVIA-WEB), nome final
 (SHVIA-WEB) ou pasta-ancestral (SHVIA pula o grupo inteiro).
 EOF
 }
@@ -72,7 +72,7 @@ should_skip() {
     return 1
 }
 
-# ── descoberta (mesma do git_pull.sh: BASE/repo e BASE/grupo/repo) ──────────────
+# ── descoberta (mesma do pull.sh: BASE/repo e BASE/grupo/repo) ──────────────
 REPOS=()
 while IFS= read -r gitdir; do
     repo="${gitdir%/.git}"

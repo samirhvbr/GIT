@@ -1,5 +1,5 @@
 #!/bin/bash
-# clone_all.sh v1.8.13
+# clone_all.sh v1.9.0
 set -euo pipefail
 
 # --dry-run/-n é filtrado ANTES de tudo: o destino sai de "$2", então a flag não
@@ -17,7 +17,7 @@ for _a in ${@+"$@"}; do
 done
 set -- ${_args[@]+"${_args[@]}"}
 
-VERSION="1.8.13"
+VERSION="1.9.0"
 
 # ── Como o destino de cada repositório é decidido ─────────────────────────────
 # A meta é NÃO precisar de manutenção manual quando a lista de repositórios muda.
@@ -44,7 +44,7 @@ VERSION="1.8.13"
 # nem todo grupo nasce de prefixo — `KIDS/` junta MARTHINA-CLASS e RAFAELA-MEMORIA,
 # que não têm início comum. Encurtando só os que têm, o layout misturaria dois
 # estilos e o nome da pasta deixaria de dizer qual é o repositório — justamente o
-# que o git_status/pull/push mostram na tela.
+# que o status/pull/push mostram na tela.
 GRUPO_TERCEIROS="${GRUPO_TERCEIROS:-000}"
 MAPA="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/repos-grupos.map"
 
@@ -96,7 +96,7 @@ BASE="$(dirname "$SCRIPT_DIR")"
 
 # Destino: 2º argumento (pasta onde clonar todos os repos), senão BASE
 # (comportamento antigo — um nível acima de GIT/).
-# Ex: ./git_clone_all.sh samirhvbr ~/x/samirhvbr
+# Ex: ./clone_all.sh samirhvbr ~/x/samirhvbr
 DEST_DIR="${2:-$BASE}"
 # Expande ~ mesmo se vier entre aspas (sem aspas, o shell já expande sozinho).
 case "$DEST_DIR" in
@@ -107,7 +107,7 @@ esac
 GREEN='\033[0;32m'; RED='\033[0;31m'; YELLOW='\033[1;33m'
 CYAN='\033[0;36m'; BOLD='\033[1m'; NC='\033[0m'
 
-# Pré-requisito: gh instalado e autenticado (igual ao git_clone.sh).
+# Pré-requisito: gh instalado e autenticado (igual ao clone.sh).
 if ! command -v gh >/dev/null 2>&1; then
     echo -e "${RED}✗ gh (GitHub CLI) não encontrado.${NC} Instale em https://cli.github.com e rode 'gh auth login'."
     exit 1
@@ -119,20 +119,20 @@ fi
 
 # Dono a clonar: 1º argumento, ou o usuário autenticado no gh (zero manutenção —
 # descobre a conta sozinho).
-#   ./git_clone_all.sh                            (usuário do gh   → BASE)
-#   ./git_clone_all.sh outro-usuario              (outro dono      → BASE)
-#   ./git_clone_all.sh outro-usuario ~/x/pasta    (outro dono      → pasta escolhida)
-#   ./git_clone_all.sh samirhvbr,BLUE3-ISP        (VÁRIOS donos    → BASE)
-#   ./git_clone_all.sh samirhvbr,BLUE3-ISP -n     (só mostra o plano, não clona)
-#   ./git_clone_all.sh samirhvbr,BLUE3-ISP --aprender  (regrava o repos-grupos.map
+#   ./clone_all.sh                            (usuário do gh   → BASE)
+#   ./clone_all.sh outro-usuario              (outro dono      → BASE)
+#   ./clone_all.sh outro-usuario ~/x/pasta    (outro dono      → pasta escolhida)
+#   ./clone_all.sh samirhvbr,BLUE3-ISP        (VÁRIOS donos    → BASE)
+#   ./clone_all.sh samirhvbr,BLUE3-ISP -n     (só mostra o plano, não clona)
+#   ./clone_all.sh samirhvbr,BLUE3-ISP --aprender  (regrava o repos-grupos.map
 #                                                       a partir do layout do disco)
 # Aceita VÁRIOS donos separados por vírgula. Não é luxo: o layout real abrange mais
 # de uma conta — os BLUE3-* pertencem à org BLUE3-ISP, não ao usuário pessoal, e um
 # "clona tudo do dono" com um dono só reproduz o disco pela metade, em silêncio.
-#   ./git_clone_all.sh samirhvbr,BLUE3-ISP
+#   ./clone_all.sh samirhvbr,BLUE3-ISP
 OWNERS="${1:-$(gh api user --jq .login 2>/dev/null)}"
 if [ -z "$OWNERS" ]; then
-    echo -e "${RED}✗ Não foi possível descobrir o usuário do gh.${NC} Passe explícito: ./git_clone_all.sh <usuario>[,<outro>]"
+    echo -e "${RED}✗ Não foi possível descobrir o usuário do gh.${NC} Passe explícito: ./clone_all.sh <usuario>[,<outro>]"
     exit 1
 fi
 
@@ -141,7 +141,7 @@ echo -e "${BOLD}clone_all.sh v${VERSION} — dono(s): ${OWNERS} → destino: ${D
 [ "$DRY_RUN" -eq 0 ] && mkdir -p "$DEST_DIR"
 
 # Lista TODOS os repositórios do dono (até 1000) direto da API do GitHub — assim
-# não precisa manter lista fixa como o git_clone.sh. Ajuste os filtros abaixo se
+# não precisa manter lista fixa como o clone.sh. Ajuste os filtros abaixo se
 # quiser incluir/excluir forks ou arquivados:
 #   --no-archived   (padrão aqui: pula os arquivados)
 #   --fork / --source  para restringir a forks ou só repos originais
@@ -220,7 +220,7 @@ if [ "$APRENDER" -eq 1 ]; then
     {
         echo "# repos-grupos.map — exceções ao agrupamento automático."
         echo "#"
-        echo "# GERADO por: ./git_clone_all.sh <donos> --aprender"
+        echo "# GERADO por: ./clone_all.sh <donos> --aprender"
         echo "# Não edite à mão sem necessidade: rode o --aprender depois de reorganizar"
         echo "# as pastas e ele grava o que as regras não acertam sozinhas."
         echo "#"

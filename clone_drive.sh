@@ -1,13 +1,13 @@
 #!/bin/bash
-# clone_drive.sh v1.8.13
+# clone_drive.sh v1.9.0
 set -euo pipefail
 
-VERSION="1.8.13"
+VERSION="1.9.0"
 # repos: 48 (lista auto-gerada de ~/x/DRIVE em 2026-06-20)
 #
 # Reconstrói o espelho do Nextcloud em ~/x/DRIVE/ — clona cada repositório
 # oficial nextcloud/* na pasta de destino correspondente. Mesma mecânica do
-# git_clone.sh; idempotente (pula o que já existe, não mexe em pasta cheia).
+# clone.sh; idempotente (pula o que já existe, não mexe em pasta cheia).
 #
 # Para REGERAR esta lista depois que o Nextcloud sincronizar mais repos:
 #   while IFS= read -r g; do r="${g%/.git}"; d="${r#"$HOME/x"/}"; \

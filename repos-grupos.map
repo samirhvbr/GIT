@@ -1,6 +1,6 @@
 # repos-grupos.map — exceções ao agrupamento automático.
 #
-# GERADO por: ./git_clone_all.sh <donos> --aprender
+# GERADO por: ./clone_all.sh <donos> --aprender
 # Não edite à mão sem necessidade: rode o --aprender depois de reorganizar
 # as pastas e ele grava o que as regras não acertam sozinhas.
 #

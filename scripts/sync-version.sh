@@ -8,7 +8,7 @@
 # como saber se o script dele já tinha a correção que o irmão recebeu, porque o
 # número não queria dizer a mesma coisa nos dois lados.
 #
-# Com o version.md como fonte ÚNICA, `git_pull.cmd v1.5.0` e `git_pull.sh v1.5.0`
+# Com o version.md como fonte ÚNICA, `pull.cmd v1.5.0` e `pull.sh v1.5.0`
 # significam "saíram da mesma release deste repo" — que é a pergunta que o usuário
 # realmente faz. A versão de cada ferramenta isolada vive no git log, que é onde
 # esse tipo de detalhe se consulta.
@@ -17,9 +17,12 @@
 #   .sh   → VERSION="X.Y.Z"        e o `# nome.sh vX.Y.Z` do cabeçalho
 #   .cmd  → set "VERSION=X.Y.Z"    e o `rem nome.cmd vX.Y.Z` do cabeçalho
 #
-# O NOME no comentário não é tocado: em alguns arquivos ele difere do nome do
-# arquivo (`# clone.sh v1.3.0` dentro de `git_clone.sh`), e corrigir isso aqui
-# misturaria duas mudanças numa só.
+# O NOME no comentário não é tocado, só a versão depois dele. Até a 1.8.13 isso
+# importava: o cabeçalho dizia `# clone.sh` dentro de um arquivo chamado
+# `git_clone.sh`, e consertar o nome aqui misturaria duas mudanças numa só. A
+# 1.9.0 renomeou os arquivos para os nomes que os cabeçalhos já usavam, então
+# hoje os dois coincidem — o sed continua sem tocar no nome, agora por não haver
+# nada a corrigir.
 #
 # Idempotente: só escreve o arquivo que mudou de fato, e é silencioso quando tudo
 # já está em dia — assim dá para rodar sem medo antes de cada commit.

@@ -1,8 +1,8 @@
 #!/bin/bash
-# push.sh v1.8.13
+# push.sh v1.9.0
 set -euo pipefail
 
-VERSION="1.8.13"
+VERSION="1.9.0"
 
 # BASE = pasta-mãe deste script. Os scripts ficam em ~/x/git/ e os
 # projetos um nível acima (em ~/x/), então subimos de git/ para a base.
@@ -23,9 +23,9 @@ if [ ${#REPOS[@]} -eq 0 ]; then
 fi
 
 # Repositórios a PULAR: passados como argumentos na linha de comando.
-# Ex: ./git_push.sh odysseus        → envia todos, menos odysseus
-#     ./git_push.sh odysseus blue3  → pula as duas pastas
-#     ./git_push.sh DRIVE           → pula TUDO sob DRIVE/ (subárvore inteira)
+# Ex: ./push.sh odysseus        → envia todos, menos odysseus
+#     ./push.sh odysseus blue3  → pula as duas pastas
+#     ./push.sh DRIVE           → pula TUDO sob DRIVE/ (subárvore inteira)
 # Casa o caminho exato (grupo/odysseus), o nome final (odysseus)
 # ou uma pasta-ancestral (DRIVE pula DRIVE/ANDROID, DRIVE/IOS, ...).
 SKIP=("$@")
@@ -81,7 +81,7 @@ for repo in "${REPOS[@]}"; do
     #
     # Reporting it is the other half. A branch with commits and nowhere to send
     # them is the case where a push matters MOST, and it was landing in the
-    # green list as "up-to-date". git_status.sh has told this case apart since
+    # green list as "up-to-date". status.sh has told this case apart since
     # 1.5.1; the push never did.
     if ! git rev-parse --abbrev-ref --symbolic-full-name '@{u}' >/dev/null 2>&1; then
         locais=$(git rev-list --count HEAD 2>/dev/null || echo 0)

@@ -13,6 +13,40 @@ never rewritten.
 > reconstructing them now would produce a plausible history rather than a true
 > one.
 
+## 1.9.0 - the scripts drop the git_ prefix and take the name of what they do
+
+`./git_pull.sh` becomes `./pull.sh`, and the same for push, status, clone,
+clone_all and clone_drive — twelve files, `.sh` and `.cmd` renamed in the same
+commit, as the parity contract requires.
+
+The prefix was never information. Everything in this repository is a git
+operation; `git_` repeated that in every name and bought nothing, while the
+header comment inside each file had already been calling them `pull.sh`,
+`push.sh` and `clone.sh` for releases. The rename makes the two agree.
+
+## What had to move with it
+
+The old `.gitignore` re-included exactly `!git_*`, so a rename would have made
+**every script in this repository invisible to git at once** — renamed away
+from the only pattern that let them in. That ordering is why `1.8.11` came
+first: with the file at ordinary polarity, the rename needs nothing from it.
+
+`README.md`, `README_br.md`, `CLAUDE.md`, `AGENTS.md`, `run.sh`,
+`scripts/sync-version.sh` and `repos-grupos.map` were rewritten to the new
+names. Two kinds of text were deliberately left alone: the `CHANGELOG.md`
+entries below this one, and the `1.5.1 - git_status.sh: ...` line quoted in
+`CLAUDE.md` as the commit-format example. That line is a subject that is really
+in `git log`; history is not rewritten, and neither is a quotation of it.
+
+`scripts/sync-version.sh` needed one more edit than a substitution. Its header
+explained that the name in the comment is left untouched *because* it differed
+from the filename — an explanation that survived the rename as a sentence
+contradicting itself. It now says what is true: the names coincide, and the
+`sed` still does not touch them because there is nothing left to correct.
+
+**Verified:** `bash -n` on all seven `.sh` files, and
+`./scripts/sync-version.sh --check` clean.
+
 ## 1.8.13 - status.cmd names the missing upstream, as status.sh already did
 
 Parity is a contract here, and this pair had drifted. `git_status.sh` prints

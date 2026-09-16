@@ -1,12 +1,12 @@
 @echo off
 setlocal enabledelayedexpansion
-rem git_push.cmd v1.8.13 - equivalente Windows do git_push.sh
+rem push.cmd v1.9.0 - equivalente Windows do push.sh
 rem Auto-descobre os repos git sob a BASE (BASE\repo e BASE\grupo\repo),
 rem mostra o branch, avisa sobre arquivos com commit pendente e faz
 rem "git push" dos commits prontos.
 rem Texto sem acentos de proposito (compatibilidade com o code page do cmd).
 
-set "VERSION=1.8.13"
+set "VERSION=1.9.0"
 
 rem BASE = pasta-mae deste script. O .cmd fica em <BASE>\git\, entao
 rem subimos de git\ para a base. %~dp0 = pasta do script (com \ no final).
@@ -15,7 +15,7 @@ set "SCRIPT_DIR=%SCRIPT_DIR:~0,-1%"
 for %%I in ("%SCRIPT_DIR%") do set "BASE=%%~dpI"
 set "BASE=%BASE:~0,-1%"
 
-echo git_push.cmd v%VERSION% - base: %BASE%
+echo push.cmd v%VERSION% - base: %BASE%
 echo.
 
 set /a OK=0, FAIL=0

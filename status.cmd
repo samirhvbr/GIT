@@ -1,13 +1,13 @@
 @echo off
 setlocal enabledelayedexpansion
-rem git_status.cmd v1.8.13 - equivalente Windows do git_status.sh
+rem status.cmd v1.9.0 - equivalente Windows do status.sh
 rem Verificador de status (SOMENTE LEITURA) dos repos git sob a BASE
 rem (BASE\repo e BASE\grupo\repo). Mostra o branch, commits a enviar/atras
 rem do remoto e os arquivos pendentes de commit. NAO altera nada: nao faz
 rem add, commit, pull nem push.
 rem Texto sem acentos de proposito (compatibilidade com o code page do cmd).
 
-set "VERSION=1.8.13"
+set "VERSION=1.9.0"
 
 rem BASE = pasta-mae deste script. O .cmd fica em <BASE>\git\, entao
 rem subimos de git\ para a base. %~dp0 = pasta do script (com \ no final).
@@ -16,7 +16,7 @@ set "SCRIPT_DIR=%SCRIPT_DIR:~0,-1%"
 for %%I in ("%SCRIPT_DIR%") do set "BASE=%%~dpI"
 set "BASE=%BASE:~0,-1%"
 
-echo git_status.cmd v%VERSION% - base: %BASE%
+echo status.cmd v%VERSION% - base: %BASE%
 echo.
 
 set /a CLEAN=0, DIRTY=0
@@ -56,7 +56,7 @@ echo    branch: !branch!
 
 rem Commits locais a enviar / atras do remoto (se houver upstream).
 rem Sem upstream os dois `rev-list` falham e ficam em 0, e o repo aparecia
-rem como 0/0 - indistinguivel de em dia com o remoto. O git_status.sh diz
+rem como 0/0 - indistinguivel de em dia com o remoto. O status.sh diz
 rem "sem upstream configurado" desde a 1.5.1; este lado ficava calado.
 set "ahead=0"
 set "behind=0"
