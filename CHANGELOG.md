@@ -13,6 +13,13 @@ never rewritten.
 > reconstructing them now would produce a plausible history rather than a true
 > one.
 
+## 1.9.2 - version sync preserves terminal line endings
+
+The synchronizer now restores the line feed removed by command substitution and
+checks that byte when it decides whether a script is current. Repeated runs keep
+both shell and CRLF batch scripts terminated correctly instead of leaving a
+last lone carriage return or an unterminated line.
+
 ## 1.9.2 - clone all normalizes workspace directory names
 
 `clone_all.sh` now writes lowercase directory components for repository and

@@ -52,7 +52,10 @@ aplicar() {
     divergentes="$divergentes $f"
     return 0
   fi
-  printf '%s' "$novo" > "$f.tmp-sync" && cat "$f.tmp-sync" > "$f" && rm -f "$f.tmp-sync"
+  # Command substitution strips the final line feed. Restore it so repeated
+  # version synchronization does not leave an unterminated last line (or a
+  # lone carriage return in a CRLF batch file).
+  printf '%s\n' "$novo" > "$f.tmp-sync" && cat "$f.tmp-sync" > "$f" && rm -f "$f.tmp-sync"
   echo "[sync-version] $f → $VERSION"
   mudou=$((mudou + 1))
 }
@@ -60,6 +63,10 @@ aplicar() {
 for f in *.sh *.cmd; do
   [ -f "$f" ] || continue
   atual="$(cat "$f")"
+  # `$(cat)` cannot retain a final line feed, so inspect the byte on disk
+  # separately. A CR without LF is otherwise invisible to the comparison.
+  termina_em_lf=0
+  [ "$(tail -c 1 "$f" | od -An -t x1 | tr -d '[:space:]')" = "0a" ] && termina_em_lf=1
 
   case "$f" in
     *.sh)
@@ -74,7 +81,7 @@ for f in *.sh *.cmd; do
       ;;
   esac
 
-  [ "$novo" = "$atual" ] || aplicar "$f" "$novo"
+  [ "$novo" = "$atual" ] && [ "$termina_em_lf" -eq 1 ] || aplicar "$f" "$novo"
 done
 
 if [ "$CHECK" -eq 1 ]; then
