@@ -94,8 +94,10 @@ terceiros na máquina, e `clone*` cria árvore de diretórios.
 - `clone.sh` tem a lista `OWNER/REPO|PASTA_DESTINO`, que **define** o layout
   agrupado. Ela precisa acompanhar a organização real — lista desatualizada recria a
   estrutura antiga em máquina nova.
-- `clone_all.sh` clona **tudo do dono, achatado** (`dest="${repo##*/}"`). Ele é
-  para inventário/bootstrap, não para reproduzir a organização por grupo.
+- `clone_all.sh` derives the destination from the owner, fork status, shared
+  repository prefixes, and `repos-grupos.map`. Its directory components are
+  lowercase, except for `EOP` and `MIGRANDO-ZIMBRA-CARBONIO`; an existing clone
+  at the former case-preserving path is moved only when the canonical path is free.
 
 ---
 

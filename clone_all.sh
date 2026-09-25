@@ -1,5 +1,5 @@
 #!/bin/bash
-# clone_all.sh v1.9.0
+# clone_all.sh v1.9.2
 set -euo pipefail
 
 # --dry-run/-n é filtrado ANTES de tudo: o destino sai de "$2", então a flag não
@@ -17,7 +17,7 @@ for _a in ${@+"$@"}; do
 done
 set -- ${_args[@]+"${_args[@]}"}
 
-VERSION="1.9.0"
+VERSION="1.9.2"
 
 # ── Como o destino de cada repositório é decidido ─────────────────────────────
 # A meta é NÃO precisar de manutenção manual quando a lista de repositórios muda.
@@ -48,12 +48,24 @@ VERSION="1.9.0"
 GRUPO_TERCEIROS="${GRUPO_TERCEIROS:-000}"
 MAPA="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/repos-grupos.map"
 
-# Preenchidos antes do laço: nomes de repos que são fork, prefixos com 2+ repos, e
-# as exceções lidas do mapa. Strings com uma entrada por linha — o bash do macOS é
-# 3.2 e não tem array associativo.
+# Filled before the loop: fork repository names, prefixes with two or more
+# repositories, and map exceptions. These are newline-delimited strings because
+# macOS Bash 3.2 does not have associative arrays.
 FORKS=""
 PREFIXOS_AGRUPADOS=""
 EXCECOES=""
+
+# The workspace is case-normalized so a clone produces the same paths on every
+# case-sensitive machine. `SKILL` is the historical group name and becomes the
+# established `skills` directory. The two project names below are the only
+# intentional uppercase exceptions.
+nome_normalizado() {
+    case "$1" in
+        EOP|MIGRANDO-ZIMBRA-CARBONIO) printf '%s' "$1" ;;
+        SKILL|skill) printf '%s' 'skills' ;;
+        *) printf '%s' "$1" | tr '[:upper:]' '[:lower:]' ;;
+    esac
+}
 
 carregar_excecoes() {
     [ -f "$MAPA" ] || return 0
@@ -61,7 +73,32 @@ carregar_excecoes() {
     EXCECOES="$(grep -vE '^[[:space:]]*(#|$)' "$MAPA" || true)"
 }
 
-# Devolve o caminho de destino (relativo ao DEST_DIR) para "owner/nome".
+# Prints the legacy, case-preserving path relative to DEST_DIR for owner/name.
+# It is kept only to move an existing clone to its canonical lowercase location.
+destino_legado_de() {
+    local full="$1" owner nome grupo pfx
+    owner="${full%%/*}"; nome="${full##*/}"
+
+    grupo="$(printf '%s\n' "$EXCECOES" | awk -v n="$nome" '$1==n {print $2; exit}')"
+    if [ -n "$grupo" ]; then
+        [ "$grupo" = "-" ] && { printf '%s' "$nome"; return; }
+        printf '%s/%s' "$grupo" "$nome"; return
+    fi
+
+    if ! printf '%s\n' "$DONOS_LISTA" | grep -qxF "$owner" \
+       || printf '%s\n' "$FORKS" | grep -qxF "$nome"; then
+        printf '%s/%s' "$GRUPO_TERCEIROS" "$nome"; return
+    fi
+
+    pfx="$(printf '%s' "${nome%%[-_]*}" | tr '[:lower:]' '[:upper:]')"
+    if printf '%s\n' "$PREFIXOS_AGRUPADOS" | grep -qx "$pfx"; then
+        printf '%s/%s' "$pfx" "$nome"; return
+    fi
+
+    printf '%s' "$nome"
+}
+
+# Prints the canonical path relative to DEST_DIR for owner/name.
 destino_de() {
     local full="$1" owner nome grupo pfx
     owner="${full%%/*}"; nome="${full##*/}"
@@ -69,24 +106,43 @@ destino_de() {
     # 1. exceção explícita
     grupo="$(printf '%s\n' "$EXCECOES" | awk -v n="$nome" '$1==n {print $2; exit}')"
     if [ -n "$grupo" ]; then
-        [ "$grupo" = "-" ] && { printf '%s' "$nome"; return; }
-        printf '%s/%s' "$grupo" "$nome"; return
+        [ "$grupo" = "-" ] && { nome_normalizado "$nome"; return; }
+        printf '%s/%s' "$(nome_normalizado "$grupo")" "$(nome_normalizado "$nome")"; return
     fi
 
     # 2. dono de fora / 3. fork → balde de terceiros
     if ! printf '%s\n' "$DONOS_LISTA" | grep -qxF "$owner" \
        || printf '%s\n' "$FORKS" | grep -qxF "$nome"; then
-        printf '%s/%s' "$GRUPO_TERCEIROS" "$nome"; return
+        printf '%s/%s' "$(nome_normalizado "$GRUPO_TERCEIROS")" "$(nome_normalizado "$nome")"; return
     fi
 
     # 4. prefixo compartilhado
     pfx="$(printf '%s' "${nome%%[-_]*}" | tr '[:lower:]' '[:upper:]')"
     if printf '%s\n' "$PREFIXOS_AGRUPADOS" | grep -qx "$pfx"; then
-        printf '%s/%s' "$pfx" "$nome"; return
+        printf '%s/%s' "$(nome_normalizado "$pfx")" "$(nome_normalizado "$nome")"; return
     fi
 
     # 5. raiz
-    printf '%s' "$nome"
+    nome_normalizado "$nome"
+}
+
+# Moves one known legacy clone only when its canonical destination is free. The
+# collision check deliberately leaves both locations untouched for manual review.
+migrar_destino_legado() {
+    local legado="$1" destino="$2" legado_pai
+    [ "$legado" = "$destino" ] && return 0
+    [ -d "$legado/.git" ] || return 0
+
+    if [ -e "$destino" ]; then
+        echo -e "   ${RED}✗ Legacy path exists, but canonical destination also exists${NC}"
+        return 1
+    fi
+
+    mkdir -p "$(dirname "$destino")"
+    mv "$legado" "$destino"
+    legado_pai="$(dirname "$legado")"
+    rmdir "$legado_pai" 2>/dev/null || true
+    echo -e "   ${GREEN}✓ Migrated${NC} ${legado#"$DEST_DIR"/} → ${destino#"$DEST_DIR"/}"
 }
 
 # BASE = pasta-mãe deste script (mesma lógica do clone/pull/push): os
@@ -241,10 +297,20 @@ while IFS= read -r repo; do
     nome="${repo##*/}"
     dest="$(destino_de "$repo")"
     target="$DEST_DIR/$dest"
+    legado_dest="$(destino_legado_de "$repo")"
+    legado_target="$DEST_DIR/$legado_dest"
+
+    if [ "$legado_target" != "$target" ] && [ -d "$legado_target/.git" ] && [ -e "$target" ]; then
+        echo -e "\n${CYAN}${BOLD}── $dest${NC}"
+        echo -e "   ${RED}✗ Legacy path exists, but canonical destination also exists${NC}"
+        fail+=("$dest"); continue
+    fi
 
     if [ "$DRY_RUN" -eq 1 ]; then
         if [ -d "$target/.git" ]; then
             echo -e "   ${YELLOW}já está${NC}  $dest"
+        elif [ "$legado_target" != "$target" ] && [ -d "$legado_target/.git" ]; then
+            echo -e "   ${GREEN}migraria${NC} $legado_dest → $dest"
         else
             echo -e "   ${GREEN}clonaria${NC} $dest"
         fi
@@ -258,6 +324,15 @@ while IFS= read -r repo; do
     if [ -d "$target/.git" ]; then
         echo -e "   ${YELLOW}Já existe — pulando${NC}"
         skip+=("$dest"); continue
+    fi
+
+    if [ "$legado_target" != "$target" ] && [ -d "$legado_target/.git" ]; then
+        if migrar_destino_legado "$legado_target" "$target"; then
+            ok+=("$dest")
+        else
+            fail+=("$dest")
+        fi
+        continue
     fi
 
     # Pasta existe e não está vazia (sem .git): não mexe

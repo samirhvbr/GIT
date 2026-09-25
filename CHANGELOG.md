@@ -13,6 +13,18 @@ never rewritten.
 > reconstructing them now would produce a plausible history rather than a true
 > one.
 
+## 1.9.2 - clone all normalizes workspace directory names
+
+`clone_all.sh` now writes lowercase directory components for repository and
+group names. The former `SKILL` group is named `skills`; `EOP` and
+`MIGRANDO-ZIMBRA-CARBONIO` are the two intentional uppercase exceptions.
+
+An existing repository at the former case-preserving location is moved to the
+canonical location during a normal run. The migration is skipped in dry-run
+mode and refuses to touch either location if both already exist, so a collision
+cannot silently overwrite a clone. This moves `SKILL/skill-*` into
+`skills/skill-*` as the affected repositories are processed.
+
 ## 1.9.1 - the repository stops choosing the model
 
 `CLAUDE_CODE_SUBAGENT_MODEL` leaves `.claude/settings.json`. The model is now the user's

@@ -1,5 +1,5 @@
 #!/bin/bash
-# run.sh v1.9.0 — varredura das SKILLS da casa sobre todos os repos de ~/x
+# run.sh v1.9.2 — varredura das SKILLS da casa sobre todos os repos de ~/x
 #
 # Por que existe: o ciclo do COMMITTER recebe os repos por argumento, então a linha
 # de cron acabava com uma lista fixa de caminhos — a skill só rodava onde o cron
@@ -11,14 +11,14 @@
 # raiz. Sem marcador, o repo não existe para a skill.
 set -euo pipefail
 
-VERSION="1.9.0"
+VERSION="1.9.2"
 
 # BASE = pasta-mãe deste script (~/x), igual ao pull.sh.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BASE="$(dirname "$SCRIPT_DIR")"
-SKILLS_DIR="$BASE/SKILLS"
+SKILLS_DIR="$BASE/skills"
 
-COMMITTER_CYCLE="$SKILLS_DIR/skill-COMMITTER/skill/committer/committer_cycle.py"
+COMMITTER_CYCLE="$SKILLS_DIR/skill-committer/skill/committer/committer_cycle.py"
 
 # Balde de terceiros — mesmo default do clone_all.sh. NUNCA entra na varredura:
 # repo de terceiro não recebe commit automático nosso, nem por marcador esquecido.

@@ -1,6 +1,6 @@
 @echo off
 setlocal
-rem clone_all.cmd v1.9.0 - equivalente Windows do clone_all.sh
+rem clone_all.cmd v1.9.2 - equivalente Windows do clone_all.sh
 rem Clona TODOS os repositorios de um dono via GitHub CLI (gh repo list), sem
 rem manter lista fixa. gh usa a auth do proprio gh (sem pedir usuario/senha).
 rem Texto sem acentos de proposito (compatibilidade com o code page do cmd).
@@ -10,7 +10,7 @@ rem   clone_all.cmd                          (usuario do gh -> BASE)
 rem   clone_all.cmd outro-usuario            (outro dono    -> BASE)
 rem   clone_all.cmd outro-usuario C:\destino (outro dono    -> pasta escolhida)
 
-set "VERSION=1.9.0"
+set "VERSION=1.9.2"
 
 rem BASE = pasta-mae deste script. O .cmd fica em <BASE>\GIT\, entao subimos de
 rem GIT\ para a base. %~dp0 = pasta do script (com \ no final).
@@ -114,8 +114,9 @@ exit /b 0
 :clone
 set /a FOUND+=1
 set "repo=%~1"
-rem Clone plano: a pasta usa so o nome do repo (owner/REPO -> REPO).
+rem The canonical workspace uses lowercase names, except the two established projects.
 for /f "tokens=2 delims=/" %%n in ("%repo%") do set "dest=%%n"
+call :canonical_dest "%dest%" dest
 set "target=%DEST_DIR%\%dest%"
 echo -- %dest%
 echo    %repo%
@@ -142,4 +143,40 @@ if errorlevel 1 (
 ) else (
     set /a OK+=1
 )
-exit /b 0
+exit /b 0
+
+:canonical_dest
+setlocal
+set "name=%~1"
+if "%name%"=="EOP" goto canonical_done
+if "%name%"=="MIGRANDO-ZIMBRA-CARBONIO" goto canonical_done
+if "%name%"=="SKILL" set "name=skills" & goto canonical_done
+set "name=%name:A=a%"
+set "name=%name:B=b%"
+set "name=%name:C=c%"
+set "name=%name:D=d%"
+set "name=%name:E=e%"
+set "name=%name:F=f%"
+set "name=%name:G=g%"
+set "name=%name:H=h%"
+set "name=%name:I=i%"
+set "name=%name:J=j%"
+set "name=%name:K=k%"
+set "name=%name:L=l%"
+set "name=%name:M=m%"
+set "name=%name:N=n%"
+set "name=%name:O=o%"
+set "name=%name:P=p%"
+set "name=%name:Q=q%"
+set "name=%name:R=r%"
+set "name=%name:S=s%"
+set "name=%name:T=t%"
+set "name=%name:U=u%"
+set "name=%name:V=v%"
+set "name=%name:W=w%"
+set "name=%name:X=x%"
+set "name=%name:Y=y%"
+set "name=%name:Z=z%"
+:canonical_done
+endlocal & set "%~2=%name%"
+exit /b 0
