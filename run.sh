@@ -1,5 +1,5 @@
 #!/bin/bash
-# run.sh v1.9.2 — varredura das SKILLS da casa sobre todos os repos de ~/x
+# run.sh v1.9.3 — varredura das SKILLS da casa sobre todos os repos de ~/x
 #
 # Por que existe: o ciclo do COMMITTER recebe os repos por argumento, então a linha
 # de cron acabava com uma lista fixa de caminhos — a skill só rodava onde o cron
@@ -11,7 +11,7 @@
 # raiz. Sem marcador, o repo não existe para a skill.
 set -euo pipefail
 
-VERSION="1.9.2"
+VERSION="1.9.3"
 
 # BASE = pasta-mãe deste script (~/x), igual ao pull.sh.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

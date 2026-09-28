@@ -1,5 +1,5 @@
 #!/bin/bash
-# status.sh v1.9.2
+# status.sh v1.9.3
 # ------------------------------------------------------------------
 # Verificador de status (SOMENTE LEITURA) dos repositórios sob ~/x/.
 #
@@ -9,7 +9,7 @@
 # nada: não faz add, commit, pull nem push.
 set -euo pipefail
 
-VERSION="1.9.2"
+VERSION="1.9.3"
 
 # BASE = pasta-mãe deste script. Os scripts ficam em ~/x/git/ e os
 # projetos um nível acima (em ~/x/), então subimos de git/ para a base.

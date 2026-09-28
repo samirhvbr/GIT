@@ -1,11 +1,11 @@
 @echo off
 setlocal enabledelayedexpansion
-rem pull.cmd v1.9.2 - equivalente Windows do pull.sh
+rem pull.cmd v1.9.3 - equivalente Windows do pull.sh
 rem Auto-descobre os repos git sob a BASE (BASE\repo e BASE\grupo\repo)
 rem e roda "git pull --ff-only" em cada um.
 rem Texto sem acentos de proposito (compatibilidade com o code page do cmd).
 
-set "VERSION=1.9.2"
+set "VERSION=1.9.3"
 
 rem BASE = pasta-mae deste script. O .cmd fica em <BASE>\git\, entao
 rem subimos de git\ para a base. %~dp0 = pasta do script (com \ no final).
@@ -82,6 +82,7 @@ rem One list per failure reason, filled by :addmot. Same set of reasons as the
 rem .sh, minus "diretorio nao encontrado": this side only calls :pull on a
 rem directory it has already seen holding a .git.
 set "MOT_UPSTREAM="
+set "MOT_MERGEADA="
 set "MOT_APAGADA="
 set "MOT_DIVERGIU="
 set "MOT_SUJA="
@@ -152,6 +153,7 @@ if defined FAILLIST (
     rem Agrupado por motivo: a lista corrida responde "quais", e o que se quer
     rem saber e "qual conserto", que nao e o mesmo para os repos dela.
     if defined MOT_UPSTREAM echo       sem upstream:!MOT_UPSTREAM!
+    if defined MOT_MERGEADA echo       branch apagada, ja na principal:!MOT_MERGEADA!
     if defined MOT_APAGADA  echo       branch apagada no remoto:!MOT_APAGADA!
     if defined MOT_DIVERGIU echo       divergiu do remoto:!MOT_DIVERGIU!
     if defined MOT_SUJA     echo       arvore suja:!MOT_SUJA!
@@ -187,8 +189,15 @@ if "!RC!"=="0" (
     set "OKLIST=!OKLIST! !rel!"
 ) else (
     call :classify
-    echo    x !MOTIVO!
-    call :addmot "!MOTKEY!" "!rel!"
+    set "DETALHE="
+    set "DICA="
+    set "ALVO="
+    if "!MOTKEY!"=="APAGADA" call :apagada "!branch!"
+    set "LINHA=x !MOTIVO!"
+    if defined DETALHE set "LINHA=!LINHA! - !DETALHE!"
+    echo    !LINHA!
+    if defined DICA echo    -^> !DICA!
+    call :addmot "!MOTKEY!" "!rel!!ALVO!"
     set /a FAIL+=1
     set "FAILLIST=!FAILLIST! !rel!"
 )
@@ -238,6 +247,53 @@ if not errorlevel 1 (
     set "MOTKEY=REMOTO"
     exit /b 0
 )
+exit /b 0
+
+rem Same diagnosis as diagnose_deleted_branch in pull.sh. A branch deleted on
+rem the remote is usually one whose pull request merged and was cleaned up, and
+rem the repair is to leave it; a branch deleted with commits the default branch
+rem never received needs a person. The work counts as landed when HEAD is an
+rem ancestor of the default branch, or when merging HEAD into it would not
+rem change its tree (a squash or rebase merge). Otherwise the commits are
+rem counted and nothing is claimed. Read-only; sets MOTIVO, MOTKEY, DETALHE,
+rem DICA and ALVO. TMPOUT is free again here: :classify has already read it.
+:apagada
+set "_rem="
+for /f "delims=" %%r in ('git config "branch.%~1.remote" 2^>nul') do set "_rem=%%r"
+if not defined _rem set "_rem=origin"
+set "_def="
+for /f "delims=" %%h in ('git symbolic-ref --quiet --short "refs/remotes/%_rem%/HEAD" 2^>nul') do set "_def=%%h"
+if defined _def set "_def=!_def:*/=!"
+if defined _def goto apagada_def
+for /f "tokens=2" %%h in ('git ls-remote --symref "%_rem%" HEAD 2^>nul ^| findstr /b /c:"ref:"') do set "_def=%%h"
+if defined _def set "_def=!_def:refs/heads/=!"
+if defined _def goto apagada_def
+git rev-parse --verify --quiet "refs/remotes/%_rem%/main" >nul 2>&1 && set "_def=main"
+if defined _def goto apagada_def
+git rev-parse --verify --quiet "refs/remotes/%_rem%/master" >nul 2>&1 && set "_def=master"
+if not defined _def exit /b 0
+:apagada_def
+if "%_def%"=="%~1" exit /b 0
+git rev-parse --verify --quiet "refs/remotes/%_rem%/%_def%" >nul 2>&1 || exit /b 0
+set "_n="
+for /f %%n in ('git rev-list --count HEAD --not "%_rem%/%_def%" 2^>nul') do set "_n=%%n"
+if not defined _n exit /b 0
+if "%_n%"=="0" goto apagada_landed
+git merge-tree --write-tree "%_rem%/%_def%" HEAD > "%TMPOUT%" 2>nul
+if errorlevel 1 goto apagada_open
+set "_t="
+set /p _t=<"%TMPOUT%"
+if not defined _t goto apagada_open
+git diff --quiet %_t% "%_rem%/%_def%" 2>nul && goto apagada_landed
+:apagada_open
+set "DETALHE=%_n% commit(s) fora de %_rem%/%_def%; confira antes de trocar de branch"
+exit /b 0
+:apagada_landed
+set "MOTIVO=branch apagada, ja na principal"
+set "MOTKEY=MERGEADA"
+set "DETALHE=o trabalho ja esta em %_rem%/%_def%"
+set "DICA=git switch %_def% && git pull --ff-only"
+set "ALVO=->%_def%"
 exit /b 0
 
 rem Acumula o repo na lista do motivo. O nome da variavel e montado:

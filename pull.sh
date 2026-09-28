@@ -1,8 +1,8 @@
 #!/bin/bash
-# pull.sh v1.9.2
+# pull.sh v1.9.3
 set -euo pipefail
 
-VERSION="1.9.2"
+VERSION="1.9.3"
 
 # BASE = pasta-mãe deste script. Os scripts ficam em ~/x/git/ e os
 # projetos um nível acima (em ~/x/), então subimos de git/ para a base.
@@ -161,7 +161,58 @@ classify_fail() {
     esac
 }
 
-ok=(); fail=(); fail_reason=(); skipped=()
+# The remote's default branch, from the local origin/HEAD, then from the
+# remote itself, then by the two names in use. Empty when none of them answers.
+default_branch() {
+    local remote="$1" ref
+    if ref=$(git symbolic-ref --quiet --short "refs/remotes/$remote/HEAD" 2>/dev/null); then
+        echo "${ref#"$remote"/}"; return 0
+    fi
+    ref=$(git ls-remote --symref "$remote" HEAD 2>/dev/null \
+          | awk '$1 == "ref:" { sub("^refs/heads/", "", $2); print $2; exit }')
+    if [ -n "$ref" ]; then echo "$ref"; return 0; fi
+    for ref in main master; do
+        if git rev-parse --verify --quiet "refs/remotes/$remote/$ref" >/dev/null; then
+            echo "$ref"; return 0
+        fi
+    done
+    return 0
+}
+
+# A branch deleted on the remote is usually a branch whose pull request merged
+# and was cleaned up: nothing is at risk, and the repair is to leave it. The
+# other case, a branch deleted with commits the default branch never received,
+# needs a person. Both used to wear the same "branch apagada" label, so the
+# summary could not say which repair each repo needed.
+#
+# The work counts as landed when HEAD is an ancestor of the default branch, or
+# when merging HEAD into it would not change its tree, which is what a squash
+# or rebase merge leaves behind. When neither holds, the commits are counted
+# and nothing is claimed. Read-only; sets `motivo`, `detalhe`, `dica`, `alvo`.
+diagnose_deleted_branch() {
+    local branch="$1" remote def ahead tree
+    motivo="branch apagada no remoto"; detalhe=""; dica=""; alvo=""
+    remote=$(git config "branch.$branch.remote" 2>/dev/null || echo origin)
+    def=$(default_branch "$remote")
+    if [ -z "$def" ] || [ "$def" = "$branch" ] \
+       || ! git rev-parse --verify --quiet "refs/remotes/$remote/$def" >/dev/null; then
+        return 0
+    fi
+    ahead=$(git rev-list --count HEAD --not "$remote/$def" 2>/dev/null) || return 0
+    if [ "$ahead" -eq 0 ] \
+       || { tree=$(git merge-tree --write-tree "$remote/$def" HEAD 2>/dev/null) \
+            && [ "$tree" = "$(git rev-parse "$remote/$def^{tree}")" ]; }; then
+        motivo="branch apagada, já na principal"
+        detalhe="o trabalho já está em $remote/$def"
+        dica="git switch $def && git pull --ff-only"
+        alvo="→$def"
+    else
+        detalhe="$ahead commit(s) fora de $remote/$def; confira antes de trocar de branch"
+    fi
+    return 0
+}
+
+ok=(); fail=(); fail_reason=(); fail_alvo=(); skipped=()
 
 for repo in "${REPOS[@]}"; do
     echo -e "\n${CYAN}${BOLD}── $repo${NC}"
@@ -173,7 +224,7 @@ for repo in "${REPOS[@]}"; do
 
     if ! cd "$BASE/$repo" 2>/dev/null; then
         echo -e "${RED}  ✗ Diretório não encontrado${NC}"
-        fail+=("$repo"); fail_reason+=("diretório não encontrado"); continue
+        fail+=("$repo"); fail_reason+=("diretório não encontrado"); fail_alvo+=(""); continue
     fi
 
     branch=$(git branch --show-current 2>/dev/null || echo "?")
@@ -187,9 +238,13 @@ for repo in "${REPOS[@]}"; do
         ok+=("$repo")
     else
         printf '%s\n' "$out" | sed 's/^/   /'
-        motivo=$(classify_fail "$out")
-        echo -e "   ${RED}✗ $motivo${NC}"
-        fail+=("$repo"); fail_reason+=("$motivo")
+        motivo=$(classify_fail "$out"); detalhe=""; dica=""; alvo=""
+        if [ "$motivo" = "branch apagada no remoto" ]; then
+            diagnose_deleted_branch "$branch"
+        fi
+        echo -e "   ${RED}✗ $motivo${detalhe:+ — $detalhe}${NC}"
+        if [ -n "$dica" ]; then echo -e "   ${GREEN}→ $dica${NC}"; fi
+        fail+=("$repo"); fail_reason+=("$motivo"); fail_alvo+=("$alvo")
     fi
 done
 
@@ -199,12 +254,13 @@ if [ ${#fail[@]} -gt 0 ]; then
     echo -e "${RED}  ✗ Falhou: ${fail[*]}${NC}"
     # Grouped by reason: the flat list answers "which", and what is actually
     # wanted is "which repair", which is not the same for the repos on it.
-    for motivo in "sem upstream" "branch apagada no remoto" "divergiu do remoto" \
+    for motivo in "sem upstream" "branch apagada, já na principal" \
+                  "branch apagada no remoto" "divergiu do remoto" \
                   "árvore suja" "conflito" "remoto inacessível" \
                   "diretório não encontrado" "outro"; do
         linha=""; i=0
         while [ $i -lt ${#fail[@]} ]; do
-            [ "${fail_reason[$i]}" = "$motivo" ] && linha="$linha ${fail[$i]}"
+            [ "${fail_reason[$i]}" = "$motivo" ] && linha="$linha ${fail[$i]}${fail_alvo[$i]}"
             i=$((i + 1))
         done
         [ -n "$linha" ] && echo -e "${RED}      ${motivo}:${NC}${linha}"

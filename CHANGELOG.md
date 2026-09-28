@@ -13,6 +13,33 @@ never rewritten.
 > reconstructing them now would produce a plausible history rather than a true
 > one.
 
+## 1.9.3 - pull tells a merged deleted branch apart and names the repair
+
+A pull that fails with `no such ref was fetched` used to land in a single
+bucket, "branch apagada no remoto". On 28/09/2026 four SHVIA repositories landed
+there after that day's branch cleanup: three sat on branches whose pull requests
+had merged, and one on a branch whose content had been rebuilt on master with
+its comments translated. Those are two different repairs under one label.
+
+`pull.sh` and `pull.cmd` now look at the default branch that the failed pull has
+just fetched. When HEAD is an ancestor of it, or when merging HEAD into it would
+leave its tree unchanged (which is what a squash or rebase merge leaves behind),
+the reason becomes "branch apagada, já na principal". The repo's block then
+prints `git switch <default> && git pull --ff-only`, and the summary names the
+target (`repo→main`). Otherwise the old reason stays, now with the count of
+commits outside the default branch. The diagnosis only reads. Switching is left
+to the user, as the rule on scripts that write requires.
+
+The default branch comes from the local `origin/HEAD`, then from
+`git ls-remote --symref`, then from whichever of `main`/`master` exists.
+
+Measured: `tests/pull_deleted_branch_test.sh` (a merge, a squash with no local
+`origin/HEAD`, and a branch deleted unmerged) passes on this version and fails
+against 1.9.2. Run read-only on the four SHVIA repositories, the diagnosis
+classifies BENCH, CODE and SITE as landed and WORKSPACE as one commit outside
+master, which matches the cleanup's own record. `pull.cmd` was not executed:
+there is no cmd interpreter on the machine where this was written.
+
 ## 1.9.2 - version sync preserves terminal line endings
 
 The synchronizer now restores the line feed removed by command substitution and

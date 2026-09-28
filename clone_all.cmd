@@ -1,6 +1,6 @@
 @echo off
 setlocal
-rem clone_all.cmd v1.9.2 - equivalente Windows do clone_all.sh
+rem clone_all.cmd v1.9.3 - equivalente Windows do clone_all.sh
 rem Clona TODOS os repositorios de um dono via GitHub CLI (gh repo list), sem
 rem manter lista fixa. gh usa a auth do proprio gh (sem pedir usuario/senha).
 rem Texto sem acentos de proposito (compatibilidade com o code page do cmd).
@@ -10,7 +10,7 @@ rem   clone_all.cmd                          (usuario do gh -> BASE)
 rem   clone_all.cmd outro-usuario            (outro dono    -> BASE)
 rem   clone_all.cmd outro-usuario C:\destino (outro dono    -> pasta escolhida)
 
-set "VERSION=1.9.2"
+set "VERSION=1.9.3"
 
 rem BASE = pasta-mae deste script. O .cmd fica em <BASE>\GIT\, entao subimos de
 rem GIT\ para a base. %~dp0 = pasta do script (com \ no final).

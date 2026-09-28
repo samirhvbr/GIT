@@ -1,8 +1,8 @@
 #!/bin/bash
-# clone_drive.sh v1.9.2
+# clone_drive.sh v1.9.3
 set -euo pipefail
 
-VERSION="1.9.2"
+VERSION="1.9.3"
 # repos: 48 (lista auto-gerada de ~/x/DRIVE em 2026-06-20)
 #
 # Reconstrói o espelho do Nextcloud em ~/x/DRIVE/ — clona cada repositório
