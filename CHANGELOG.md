@@ -13,6 +13,19 @@ never rewritten.
 > reconstructing them now would produce a plausible history rather than a true
 > one.
 
+## 1.9.4 - the echo blocks are regenerated from repodocs
+
+The marked rules in `CLAUDE.md` and `AGENTS.md` are rewritten from the single
+source at [samirhvbr/repodocs](https://github.com/samirhvbr/repodocs):
+`QUEUE-RULE`, `RELEASES-RULE`, `LANGUAGE-RULE`, `COMMIT-RULE` and `CICD-RULE`.
+A block is replaced whole between its markers, heading included — which is what
+stops a local edit from surviving a regeneration and confusing the next reader.
+
+`QUEUE-RULE` is new and arrives here for the first time: `.continue/` holds work
+that does not exist yet, and a document leaves it when — and only when — the
+thing it describes **exists**. Length, language and untidiness are not exit
+conditions. **Never empty that folder as tidying.**
+
 ## 1.9.3 - pull tells a merged deleted branch apart and names the repair
 
 A pull that fails with `no such ref was fetched` used to land in a single
