@@ -1,8 +1,8 @@
 #!/bin/bash
-# pull.sh v1.9.3
+# pull.sh v1.9.5
 set -euo pipefail
 
-VERSION="1.9.3"
+VERSION="1.9.5"
 
 # BASE = pasta-mãe deste script. Os scripts ficam em ~/x/git/ e os
 # projetos um nível acima (em ~/x/), então subimos de git/ para a base.
@@ -85,9 +85,19 @@ casa() {
 
 # Auto-descobre todos os repositórios git sob a base, até 2 níveis
 # (BASE/repo e BASE/grupo/repo). Sempre reflete as pastas atuais.
-ACHADOS=()
+#
+# A `.git` directory counts only when it holds a HEAD. An empty one is not a
+# repository: SHVIA/.git was exactly that (no HEAD, no objects), so the sweep
+# listed the group folder as a repo and failed it with "not a git repository".
+# Such a folder is reported and skipped; the repositories below it are still found.
+ACHADOS=(); VAZIOS=""
 while IFS= read -r gitdir; do
     repo="${gitdir%/.git}"
+    if [ ! -e "$gitdir/HEAD" ]; then
+        VAZIOS="$VAZIOS${repo#"$BASE"/}
+"
+        continue
+    fi
     ACHADOS+=("${repo#"$BASE"/}")
 done < <(find "$BASE" -maxdepth 3 -type d -name .git -prune 2>/dev/null | sort)
 
@@ -131,6 +141,11 @@ echo -e "${BOLD}$NOME v${VERSION} — base: ${BASE} (${#REPOS[@]} de ${#ACHADOS[
 [ -n "$EXCLUDE" ] && echo -e "${YELLOW}  -d fora: $(printf '%s' "$EXCLUDE" | tr '\n' ' ')${NC}"
 avisa_orfaos "$ONLY" "-i"
 avisa_orfaos "$EXCLUDE" "-d"
+while IFS= read -r vazio; do
+    if [ -n "$vazio" ]; then
+        echo -e "${YELLOW}  ⚠ $vazio/.git ignorado: diretório sem HEAD, não é repositório${NC}"
+    fi
+done <<< "$VAZIOS"
 
 if [ ${#REPOS[@]} -eq 0 ]; then
     echo -e "${RED}Nenhum repositório sobrou depois do -i/-d — nada a fazer.${NC}" >&2

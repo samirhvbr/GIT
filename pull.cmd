@@ -1,11 +1,11 @@
 @echo off
 setlocal enabledelayedexpansion
-rem pull.cmd v1.9.3 - equivalente Windows do pull.sh
+rem pull.cmd v1.9.5 - equivalente Windows do pull.sh
 rem Auto-descobre os repos git sob a BASE (BASE\repo e BASE\grupo\repo)
 rem e roda "git pull --ff-only" em cada um.
 rem Texto sem acentos de proposito (compatibilidade com o code page do cmd).
 
-set "VERSION=1.9.3"
+set "VERSION=1.9.5"
 
 rem BASE = pasta-mae deste script. O .cmd fica em <BASE>\git\, entao
 rem subimos de git\ para a base. %~dp0 = pasta do script (com \ no final).
@@ -94,14 +94,26 @@ rem git's output goes to a file so that :classify can read it back.
 set "TMPOUT=%TEMP%\pull_%RANDOM%%RANDOM%.txt"
 
 rem -- descoberta: BASE\repo e BASE\grupo\repo (mesma do .sh) ---------------
+rem A .git directory without a HEAD is not a repository: SHVIA\.git was exactly
+rem that, so this side stopped at SHVIA as if it were a repo and never looked at
+rem the repositories below it. :tipogit tells the three cases apart, and a folder
+rem whose .git is empty is reported and still searched one level down.
 set "ACHADOS="
+set "VAZIOS="
 set /a NACHADOS=0
 for /d %%D in ("%BASE%\*") do (
-    if exist "%%D\.git" (
+    call :tipogit "%%D"
+    if not errorlevel 1 (
         call :achou "%%D"
     ) else (
+        if errorlevel 2 call :vazio "%%D"
         for /d %%E in ("%%D\*") do (
-            if exist "%%E\.git" call :achou "%%E"
+            call :tipogit "%%E"
+            if errorlevel 2 (
+                call :vazio "%%E"
+            ) else if not errorlevel 1 (
+                call :achou "%%E"
+            )
         )
     )
 )
@@ -129,6 +141,10 @@ if defined ONLY    echo   -i so:   %ONLY:;= % ^(%NFORA% fora^)
 if defined EXCLUDE echo   -d fora: %EXCLUDE:;= %
 call :avisa "%ONLY%" "-i"
 call :avisa "%EXCLUDE%" "-d"
+for %%R in ("%VAZIOS:;=" "%") do (
+    set "_r=%%~R"
+    if defined _r echo   aviso: %%~R\.git ignorado: diretorio sem HEAD, nao e repositorio
+)
 if %NSELEC%==0 (
     echo Nenhum repositorio sobrou depois do -i/-d - nada a fazer.
     pause
@@ -328,6 +344,22 @@ set "_p=%~1"
 set "_r=!_p:%BASE%\=!"
 set "ACHADOS=!ACHADOS!;!_r!"
 set /a NACHADOS+=1
+exit /b 0
+
+rem Acumula a pasta cuja .git esta vazia, ja relativa a BASE.
+:vazio
+set "_p=%~1"
+set "_r=!_p:%BASE%\=!"
+set "VAZIOS=!VAZIOS!;!_r!"
+exit /b 0
+
+rem What %~1\.git is: errorlevel 0 = a repository (a .git that holds a HEAD, or a
+rem .git file, as a worktree has), 1 = no .git at all, 2 = a .git directory
+rem without a HEAD. The trailing backslash makes "exist" true for directories only.
+:tipogit
+if not exist "%~1\.git" exit /b 1
+if exist "%~1\.git\HEAD" exit /b 0
+if exist "%~1\.git\" exit /b 2
 exit /b 0
 
 rem Aplica o -i. Sem -i, tudo entra.

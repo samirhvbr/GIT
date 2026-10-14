@@ -13,6 +13,32 @@ never rewritten.
 > reconstructing them now would produce a plausible history rather than a true
 > one.
 
+## 1.9.5 - pull skips a .git directory with no HEAD instead of failing its folder
+
+`SHVIA/.git` was an empty directory: no HEAD, no objects, created on 08/10/2026
+next to two other empty directories (`.agents`, `.aws`). Discovery looked only
+for a directory named `.git`, so the sweep listed `SHVIA` as a repository and
+`git pull` answered "not a git repository", which the summary filed under the
+catch-all `outro`. The repositories that really live under `SHVIA/` were pulled
+all the same; the failure was the folder around them.
+
+A `.git` directory now counts only when it holds a HEAD. An empty one is
+reported under the header (`⚠ SHVIA/.git ignorado: diretório sem HEAD, não é
+repositório`) and skipped, and the folder is still searched one level down.
+`pull.cmd` had the same defect with a worse effect: it stops at the first level
+that has a `.git`, so an empty one made it skip every repository under that
+group. It now tells three cases apart — a `.git` with a HEAD, a `.git` file (as
+a worktree has, still accepted there), and an empty or HEAD-less `.git`
+directory. Measured on this machine: 121 repositories found, one warning.
+
+New test: `tests/pull_discovery_test.sh`, a loose repository and a grouped one
+under a group folder with an empty `.git`, plus a folder holding nothing else.
+It fails on the 1.9.4 `pull.sh` with `outro: GRP stray` and passes now.
+`pull.cmd` was not executed: no cmd interpreter on this machine.
+
+`push`, `status` and `run` use the same `find` and still count an empty `.git`;
+they are not changed here.
+
 ## 1.9.4 - the echo blocks are regenerated from repodocs
 
 The marked rules in `CLAUDE.md` and `AGENTS.md` are rewritten from the single
