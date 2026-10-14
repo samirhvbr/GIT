@@ -54,6 +54,16 @@ new_repo merged main 1;    forge merged main merge
 new_repo squashed master 2; forge squashed master squash
 new_repo unmerged main 1;  forge unmerged main none
 
+# Landed like `merged`, but the working tree is not clean. Modified tracked
+# files (staged or not) make the switch unsafe; an untracked file does not.
+new_repo staged main 1;    forge staged main merge
+new_repo unstaged main 1;  forge unstaged main merge
+new_repo untracked main 1; forge untracked main merge
+printf 'edit\n' >> "$BASE/GRP/staged/file"
+git -C "$BASE/GRP/staged" add file
+printf 'edit\n' >> "$BASE/GRP/unstaged/file"
+printf 'scratch\n' > "$BASE/GRP/untracked/scratch"
+
 # The squash case also drops the local origin/HEAD, so the default branch has
 # to come from the remote itself.
 git -C "$BASE/GRP/squashed" remote set-head origin -d
@@ -68,13 +78,25 @@ expect "✗ branch apagada, já na principal — o trabalho já está em origin/
 expect "✗ branch apagada, já na principal — o trabalho já está em origin/master"
 expect "→ git switch master && git pull --ff-only"
 expect "✗ branch apagada no remoto — 1 commit(s) fora de origin/main; confira antes de trocar de branch"
-expect "branch apagada, já na principal: GRP/merged→main GRP/squashed→master"
+expect "branch apagada, já na principal: GRP/merged→main GRP/squashed→master GRP/untracked→main"
+expect "branch apagada, árvore suja: GRP/staged GRP/unstaged"
 expect "branch apagada no remoto: GRP/unmerged"
+expect "✗ branch apagada, árvore suja — o trabalho já está em origin/main, mas há alterações não commitadas em 1 arquivo(s) rastreado(s)"
+expect "→ git status --short — guarde ou commite as alterações antes de trocar para main"
+
+# The switch command is offered to the two clean landed clones and to nobody
+# else: merged and untracked (squashed is on master).
+switches="$(grep -cF -- '→ git switch main && git pull --ff-only' <<<"$out")"
+[[ "$switches" == 2 ]] || { printf 'switch offered %s times, expected 2\n\n%s\n' "$switches" "$out" >&2; exit 1; }
 
 # The diagnosis only reads: every clone is still on the branch it was on.
-for name in merged squashed unmerged; do
+for name in merged squashed unmerged staged unstaged untracked; do
     [[ "$(git -C "$BASE/GRP/$name" branch --show-current)" == feat ]] \
         || { printf '%s left branch feat\n' "$name" >&2; exit 1; }
 done
+git -C "$BASE/GRP/staged" diff --cached --quiet \
+    && { printf 'staged lost its staged change\n' >&2; exit 1; }
+git -C "$BASE/GRP/unstaged" diff --quiet \
+    && { printf 'unstaged lost its change\n' >&2; exit 1; }
 
 printf 'pull deleted branch test: ok\n'

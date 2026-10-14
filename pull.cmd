@@ -83,6 +83,7 @@ rem .sh, minus "diretorio nao encontrado": this side only calls :pull on a
 rem directory it has already seen holding a .git.
 set "MOT_UPSTREAM="
 set "MOT_MERGEADA="
+set "MOT_APAGSUJA="
 set "MOT_APAGADA="
 set "MOT_DIVERGIU="
 set "MOT_SUJA="
@@ -170,6 +171,7 @@ if defined FAILLIST (
     rem saber e "qual conserto", que nao e o mesmo para os repos dela.
     if defined MOT_UPSTREAM echo       sem upstream:!MOT_UPSTREAM!
     if defined MOT_MERGEADA echo       branch apagada, ja na principal:!MOT_MERGEADA!
+    if defined MOT_APAGSUJA echo       branch apagada, arvore suja:!MOT_APAGSUJA!
     if defined MOT_APAGADA  echo       branch apagada no remoto:!MOT_APAGADA!
     if defined MOT_DIVERGIU echo       divergiu do remoto:!MOT_DIVERGIU!
     if defined MOT_SUJA     echo       arvore suja:!MOT_SUJA!
@@ -271,8 +273,12 @@ rem the repair is to leave it; a branch deleted with commits the default branch
 rem never received needs a person. The work counts as landed when HEAD is an
 rem ancestor of the default branch, or when merging HEAD into it would not
 rem change its tree (a squash or rebase merge). Otherwise the commits are
-rem counted and nothing is claimed. Read-only; sets MOTIVO, MOTKEY, DETALHE,
-rem DICA and ALVO. TMPOUT is free again here: :classify has already read it.
+rem counted and nothing is claimed. A landed branch whose tracked files are
+rem modified (staged or not) gets its own reason and no switch command: the
+rem repair is a "git switch", which refuses or carries the changes onto the
+rem default branch. Untracked files are not counted. Read-only; sets MOTIVO,
+rem MOTKEY, DETALHE, DICA and ALVO. TMPOUT is free again here: :classify has
+rem already read it.
 :apagada
 set "_rem="
 for /f "delims=" %%r in ('git config "branch.%~1.remote" 2^>nul') do set "_rem=%%r"
@@ -305,11 +311,20 @@ git diff --quiet %_t% "%_rem%/%_def%" 2>nul && goto apagada_landed
 set "DETALHE=%_n% commit(s) fora de %_rem%/%_def%; confira antes de trocar de branch"
 exit /b 0
 :apagada_landed
+set "_d=0"
+for /f %%n in ('git status --porcelain --untracked-files=no 2^>nul ^| find /c /v ""') do set "_d=%%n"
+if not "%_d%"=="0" goto apagada_suja
 set "MOTIVO=branch apagada, ja na principal"
 set "MOTKEY=MERGEADA"
 set "DETALHE=o trabalho ja esta em %_rem%/%_def%"
 set "DICA=git switch %_def% && git pull --ff-only"
 set "ALVO=->%_def%"
+exit /b 0
+:apagada_suja
+set "MOTIVO=branch apagada, arvore suja"
+set "MOTKEY=APAGSUJA"
+set "DETALHE=o trabalho ja esta em %_rem%/%_def%, mas ha alteracoes nao commitadas em %_d% arquivo(s) rastreado(s)"
+set "DICA=git status --short - guarde ou commite as alteracoes antes de trocar para %_def%"
 exit /b 0
 
 rem Acumula o repo na lista do motivo. O nome da variavel e montado:

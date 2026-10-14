@@ -203,9 +203,16 @@ default_branch() {
 # The work counts as landed when HEAD is an ancestor of the default branch, or
 # when merging HEAD into it would not change its tree, which is what a squash
 # or rebase merge leaves behind. When neither holds, the commits are counted
-# and nothing is claimed. Read-only; sets `motivo`, `detalhe`, `dica`, `alvo`.
+# and nothing is claimed.
+#
+# Landed commits say nothing about the working tree, and the repair is a
+# `git switch`: with modified tracked files it either refuses or carries them
+# onto the default branch. So a landed branch whose tracked files are modified
+# (staged or not) gets its own reason and no switch command. Untracked files
+# are not counted; they only matter if they collide, and the switch says so.
+# Read-only; sets `motivo`, `detalhe`, `dica`, `alvo`.
 diagnose_deleted_branch() {
-    local branch="$1" remote def ahead tree
+    local branch="$1" remote def ahead tree sujos
     motivo="branch apagada no remoto"; detalhe=""; dica=""; alvo=""
     remote=$(git config "branch.$branch.remote" 2>/dev/null || echo origin)
     def=$(default_branch "$remote")
@@ -217,10 +224,17 @@ diagnose_deleted_branch() {
     if [ "$ahead" -eq 0 ] \
        || { tree=$(git merge-tree --write-tree "$remote/$def" HEAD 2>/dev/null) \
             && [ "$tree" = "$(git rev-parse "$remote/$def^{tree}")" ]; }; then
-        motivo="branch apagada, já na principal"
-        detalhe="o trabalho já está em $remote/$def"
-        dica="git switch $def && git pull --ff-only"
-        alvo="→$def"
+        sujos=$(git status --porcelain --untracked-files=no 2>/dev/null | wc -l | tr -d ' ')
+        if [ "${sujos:-0}" -gt 0 ]; then
+            motivo="branch apagada, árvore suja"
+            detalhe="o trabalho já está em $remote/$def, mas há alterações não commitadas em $sujos arquivo(s) rastreado(s)"
+            dica="git status --short — guarde ou commite as alterações antes de trocar para $def"
+        else
+            motivo="branch apagada, já na principal"
+            detalhe="o trabalho já está em $remote/$def"
+            dica="git switch $def && git pull --ff-only"
+            alvo="→$def"
+        fi
     else
         detalhe="$ahead commit(s) fora de $remote/$def; confira antes de trocar de branch"
     fi
@@ -270,6 +284,7 @@ if [ ${#fail[@]} -gt 0 ]; then
     # Grouped by reason: the flat list answers "which", and what is actually
     # wanted is "which repair", which is not the same for the repos on it.
     for motivo in "sem upstream" "branch apagada, já na principal" \
+                  "branch apagada, árvore suja" \
                   "branch apagada no remoto" "divergiu do remoto" \
                   "árvore suja" "conflito" "remoto inacessível" \
                   "diretório não encontrado" "outro"; do

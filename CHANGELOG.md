@@ -13,6 +13,32 @@ never rewritten.
 > reconstructing them now would produce a plausible history rather than a true
 > one.
 
+## 1.9.5 - pull separates a landed deleted branch with a modified tree from a safe one
+
+The 1.9.3 diagnosis decides "already on the default branch" from commits alone.
+On `000/ai-memory-akita` the branch `fix/multi-page-relations` was an ancestor of
+`origin/main` — the pull request had landed and the fork's branch was deleted —
+so the summary filed it under `branch apagada, já na principal` and printed
+`git switch main && git pull --ff-only`. The working tree held 177 staged files
+(+20189/-1016) that match no ref and no commit between `HEAD` and `origin/main`,
+and `HEAD` had not moved since 07/09/2026. Following the printed command would
+have been refused or, worse, carried that state onto `main`.
+
+A landed branch whose tracked files are modified, staged or not, now gets its own
+reason, `branch apagada, árvore suja`, with the count of files and
+`git status --short` in place of the switch command. Untracked files are not
+counted: they matter only if they collide with the default branch, and the
+switch reports that itself — counting them would move most clones out of the safe
+group over build leftovers. The diagnosis still only reads.
+
+The extended `tests/pull_deleted_branch_test.sh` adds clones with a staged change,
+an unstaged change and only an untracked file, checks that the switch command is
+offered to exactly the clean ones, and checks the staged and unstaged changes are
+still there afterwards. It fails on the 1.9.5 discovery commit's `pull.sh` and
+passes now; on the real `ai-memory-akita` the summary now reads
+`branch apagada, árvore suja: 000/ai-memory-akita`. `pull.cmd` was not executed:
+no cmd interpreter on this machine.
+
 ## 1.9.5 - pull skips a .git directory with no HEAD instead of failing its folder
 
 `SHVIA/.git` was an empty directory: no HEAD, no objects, created on 08/10/2026
