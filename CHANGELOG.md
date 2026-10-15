@@ -13,6 +13,36 @@ never rewritten.
 > reconstructing them now would produce a plausible history rather than a true
 > one.
 
+## 1.9.6 - push.cmd and status.cmd drop a stray CR that kept the tree dirty
+
+The `exit /b 0` line that closes the per-repository subroutine of `push.cmd`
+(line 205) and `status.cmd` (line 189) has been stored with a CRLF inside an
+otherwise LF blob since the 1.9.0 rename commit (`9763402`).
+`git ls-files --eol` reported both files as `i/mixed`; the other four `.cmd`
+files and every `.sh` and `.md` were already `i/lf`.
+
+`.gitattributes` says `*.cmd text eol=crlf`, so git converts the checked-out file
+to LF before comparing it with the index, and the stored CR can never match. In
+every clone both files read as modified, with a one-line diff that looks
+identical on screen (`-exit /b 0` / `+exit /b 0`) and is empty under
+`git diff --ignore-cr-at-eol`. `git checkout -- <file>` does not clear it: the
+checkout rewrites the same bytes and the next hash shows the same difference.
+
+It surfaced on 15/10/2026 as `árvore suja` in `pull.sh`. The 1.9.5 fast-forward
+changes both files, so `git pull --ff-only` aborted with "Your local changes to
+the following files would be overwritten by merge" on a tree where nobody had
+edited anything. The classification was right; the dirtiness was not real.
+
+`git add --renormalize` rewrites the two blobs with LF on that line. Nothing a
+script does changes: with `eol=crlf` the working-tree files stay CRLF on every
+line, as before. A fresh clone now reports `i/lf` for all six `.cmd` files and a
+clean `git status`.
+
+**Cleaning an affected clone:** a clone that already holds the stray CR must
+delete the two files from disk before pulling this commit (`rm push.cmd
+status.cmd`, then `git pull --ff-only`). `git checkout -- push.cmd status.cmd`
+was tried first and the pull aborted again.
+
 ## 1.9.5 - pull separates a landed deleted branch with a modified tree from a safe one
 
 The 1.9.3 diagnosis decides "already on the default branch" from commits alone.
