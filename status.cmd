@@ -81,14 +81,24 @@ set "DIRTYLIST="
 set "SKIPLIST="
 
 rem -- descoberta: BASE\repo e BASE\grupo\repo (mesma do .sh) ---------------
+rem A .git directory without a HEAD is not a repository, as in pull.cmd: before
+rem 1.9.8 this side stopped at such a folder and never looked below it.
 set "ACHADOS="
+set "VAZIOS="
 set /a NACHADOS=0
 for /d %%D in ("%BASE%\*") do (
-    if exist "%%D\.git" (
+    call :tipogit "%%D"
+    if not errorlevel 1 (
         call :achou "%%D"
     ) else (
+        if errorlevel 2 call :vazio "%%D"
         for /d %%E in ("%%D\*") do (
-            if exist "%%E\.git" call :achou "%%E"
+            call :tipogit "%%E"
+            if errorlevel 2 (
+                call :vazio "%%E"
+            ) else if not errorlevel 1 (
+                call :achou "%%E"
+            )
         )
     )
 )
@@ -116,6 +126,10 @@ if defined ONLY    echo   -i so:   %ONLY:;= % ^(%NFORA% fora^)
 if defined EXCLUDE echo   -d fora: %EXCLUDE:;= %
 call :avisa "%ONLY%" "-i"
 call :avisa "%EXCLUDE%" "-d"
+for %%R in ("%VAZIOS:;=" "%") do (
+    set "_r=%%~R"
+    if defined _r echo   aviso: %%~R\.git ignorado: diretorio sem HEAD, nao e repositorio
+)
 if %NSELEC%==0 (
     echo Nenhum repositorio sobrou depois do -i/-d - nada a fazer.
     pause
@@ -174,10 +188,13 @@ if not defined upstream (
 )
 
 rem Arquivos modificados/staged/untracked ainda nao commitados.
-set "dirty=0"
-for /f %%c in ('git status --porcelain 2^>nul ^| find /c /v ""') do set "dirty=%%c"
-if not "!dirty!"=="0" (
-    echo    [*] !dirty! arquivo^(s^) pendente^(s^) de commit:
+rem The per-repository count is _nsujos, never "dirty": cmd variable names
+rem ignore case, so a local "dirty" overwrote the global DIRTY counter and the
+rem summary printed the last repository's file count plus one.
+set "_nsujos=0"
+for /f %%c in ('git status --porcelain 2^>nul ^| find /c /v ""') do set "_nsujos=%%c"
+if not "!_nsujos!"=="0" (
+    echo    [*] !_nsujos! arquivo^(s^) pendente^(s^) de commit:
     for /f "delims=" %%f in ('git status --porcelain 2^>nul') do echo          %%f
     set /a DIRTY+=1
     set "DIRTYLIST=!DIRTYLIST! !rel!"
@@ -209,6 +226,20 @@ echo   status.cmd -i BLUE3 -d BLUE3\CNPJ    so BLUE3\, menos o CNPJ
 exit /b 0
 
 rem Acumula o repo descoberto, ja relativo a BASE.
+:vazio
+set "_p=%~1"
+set "_r=!_p:%BASE%\=!"
+set "VAZIOS=!VAZIOS!;!_r!"
+exit /b 0
+
+rem What the .git of the folder in the first argument is, as in pull.cmd:
+rem errorlevel 0 = a repository, 1 = no .git, 2 = a .git directory without a HEAD.
+:tipogit
+if not exist "%~1\.git" exit /b 1
+if exist "%~1\.git\HEAD" exit /b 0
+if exist "%~1\.git\" exit /b 2
+exit /b 0
+
 :achou
 set "_p=%~1"
 set "_r=!_p:%BASE%\=!"

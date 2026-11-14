@@ -13,6 +13,25 @@ never rewritten.
 > reconstructing them now would produce a plausible history rather than a true
 > one.
 
+## 1.9.8 - status skips an empty .git on both sides and status.cmd counts pending repositories right
+
+`status.sh` and `status.cmd` never got the discovery check `pull` received in
+1.9.5. An empty `.git` was listed as a repository and reported clean — git had
+walked up to whatever sat above it — and on the Windows side the folder holding
+it was taken for a repository, so every repository below it was never shown while
+the banner count looked complete. Both sides now count a `.git` directory only
+when it holds a HEAD and name the ones they skip.
+
+`status.cmd` also printed a wrong `Pendente` count. Variable names in cmd ignore
+case, so the per-repository `dirty` and the global `DIRTY` counter were one
+variable: the summary showed the last repository's file count plus one, not the
+number of repositories with pending changes. The per-repository count is
+`_nsujos` now.
+
+`tests/status_discovery_test.sh` is the first test of `status.sh`; it fails on the
+previous commit's `status.sh` and passes now. `status.cmd` was not executed: no
+cmd interpreter on this machine.
+
 ## 1.9.8 - push finishes the sweep, pushes only the folder's own repository and never recreates a deleted branch
 
 The 14/11/2026 review reproduced three ways `push.sh` failed, all at once in one

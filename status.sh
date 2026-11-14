@@ -92,9 +92,17 @@ casa() {
 
 # Auto-descobre todos os repositórios git sob a base, até 2 níveis
 # (BASE/repo e BASE/grupo/repo). Sempre reflete as pastas atuais.
-ACHADOS=()
+# A `.git` directory counts only when it holds a HEAD, as in pull.sh and push.sh.
+# Without the check an empty `.git` was listed as a repository and reported
+# "✓ limpo" — git had walked up to whatever repository sat above it.
+ACHADOS=(); VAZIOS=""
 while IFS= read -r gitdir; do
     repo="${gitdir%/.git}"
+    if [ ! -e "$gitdir/HEAD" ]; then
+        VAZIOS="$VAZIOS${repo#"$BASE"/}
+"
+        continue
+    fi
     ACHADOS+=("${repo#"$BASE"/}")
 done < <(find "$BASE" -maxdepth 3 -type d -name .git -prune 2>/dev/null | sort)
 
@@ -138,6 +146,11 @@ echo -e "${BOLD}$NOME v${VERSION} — base: ${BASE} (${#REPOS[@]} de ${#ACHADOS[
 [ -n "$EXCLUDE" ] && echo -e "${YELLOW}  -d fora: $(printf '%s' "$EXCLUDE" | tr '\n' ' ')${NC}"
 avisa_orfaos "$ONLY" "-i"
 avisa_orfaos "$EXCLUDE" "-d"
+while IFS= read -r vazio; do
+    if [ -n "$vazio" ]; then
+        echo -e "${YELLOW}  ⚠ $vazio/.git ignorado: diretório sem HEAD, não é repositório${NC}"
+    fi
+done <<< "$VAZIOS"
 
 if [ ${#REPOS[@]} -eq 0 ]; then
     echo -e "${RED}Nenhum repositório sobrou depois do -i/-d — nada a fazer.${NC}" >&2
