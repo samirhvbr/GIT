@@ -13,6 +13,37 @@ never rewritten.
 > reconstructing them now would produce a plausible history rather than a true
 > one.
 
+## 1.9.8 - push finishes the sweep, pushes only the folder's own repository and never recreates a deleted branch
+
+The 14/11/2026 review reproduced three ways `push.sh` failed, all at once in one
+base. A repository whose `git status` failed (an unreadable index) ended the
+whole sweep: under `set -euo pipefail` the pipeline's status reached the
+assignment, the script exited 128 with no summary, and every repository after it
+went unpushed — the class of bug 1.8.12 had fixed for `@{u}` only. An empty
+`.git` was taken for a repository, and git walked up from it: with a repository
+above BASE, `push.sh` pushed that one under the group folder's name. And a branch
+whose upstream had been deleted on the remote, usually after its pull request
+merged, got `git push -u origin <branch>` as its repair, which recreates it.
+
+Discovery now counts a `.git` directory only when it holds a HEAD, as `pull.sh`
+has since 1.9.5, and names the ones it skips. Each folder must be the repository
+git answers for (`git rev-parse --show-toplevel`), or it is a failure and nothing
+runs there. A failing `git status` is a failure of that repository and the sweep
+goes on. A configured upstream that no longer resolves is `upstream apagado no
+remoto`, in a summary line of its own, with the diagnosis as the repair — run
+`pull.sh`, which tells merged from unmerged — and never the push. A repository
+with no remote, or on a detached HEAD, is `Sem o que enviar` instead of "sem
+upstream, push to origin", and the count printed for a branch with no upstream is
+its commits that no remote has, not its whole history.
+
+`tests/push_sweep_test.sh` is the first test of `push.sh`: six repositories and an
+empty `.git`, one with an unreadable index, one whose upstream was deleted, one
+with no remote. The previous commit's `push.sh` exits 128 on it; this one pushes
+the three ready repositories, files the unreadable one as a failure and leaves
+the deleted branch deleted. `push.cmd` carries the same changes, with the
+`:tipogit` discovery of `pull.cmd`; it was not executed: no cmd interpreter on
+this machine.
+
 ## 1.9.8 - pull keeps a stopped rebase and a detached HEAD with unsaved commits among the failures
 
 1.9.7 moved every detached HEAD out of the failure list into `Sem o que puxar`,

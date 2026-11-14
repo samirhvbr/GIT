@@ -78,18 +78,32 @@ set /a OK=0, FAIL=0
 set "OKLIST="
 set "WARNLIST="
 set "NOUPSLIST="
+set "GONELIST="
+set "PARADOS="
 set "FAILLIST="
 set "SKIPLIST="
 
 rem -- descoberta: BASE\repo e BASE\grupo\repo (mesma do .sh) ---------------
+rem A .git directory without a HEAD is not a repository, as in pull.cmd since
+rem 1.9.5. Before 1.9.8 this side stopped at such a folder as if it were a repo
+rem and never looked below it: every repository of that group went unpushed
+rem while the banner count looked complete.
 set "ACHADOS="
+set "VAZIOS="
 set /a NACHADOS=0
 for /d %%D in ("%BASE%\*") do (
-    if exist "%%D\.git" (
+    call :tipogit "%%D"
+    if not errorlevel 1 (
         call :achou "%%D"
     ) else (
+        if errorlevel 2 call :vazio "%%D"
         for /d %%E in ("%%D\*") do (
-            if exist "%%E\.git" call :achou "%%E"
+            call :tipogit "%%E"
+            if errorlevel 2 (
+                call :vazio "%%E"
+            ) else if not errorlevel 1 (
+                call :achou "%%E"
+            )
         )
     )
 )
@@ -117,6 +131,10 @@ if defined ONLY    echo   -i so:   %ONLY:;= % ^(%NFORA% fora^)
 if defined EXCLUDE echo   -d fora: %EXCLUDE:;= %
 call :avisa "%ONLY%" "-i"
 call :avisa "%EXCLUDE%" "-d"
+for %%R in ("%VAZIOS:;=" "%") do (
+    set "_r=%%~R"
+    if defined _r echo   aviso: %%~R\.git ignorado: diretorio sem HEAD, nao e repositorio
+)
 if %NSELEC%==0 (
     echo Nenhum repositorio sobrou depois do -i/-d - nada a fazer.
     pause
@@ -136,8 +154,10 @@ echo   OK: %OK%   Falhou: %FAIL%
 if defined OKLIST   echo   OK:       %OKLIST%
 if defined WARNLIST echo   Commitar: %WARNLIST%
 if defined NOUPSLIST echo   Sem upstream: %NOUPSLIST%
+if defined GONELIST echo   Upstream apagado: %GONELIST%
 if defined FAILLIST echo   Falhou:   %FAILLIST%
 if defined SKIPLIST echo   Pulado:  %SKIPLIST%
+if defined PARADOS echo   Sem o que enviar:!PARADOS!
 echo.
 pause
 exit /b 0
@@ -153,10 +173,37 @@ if not errorlevel 1 (
     set "SKIPLIST=!SKIPLIST! !rel!"
     exit /b 0
 )
-cd /d "!repo!"
+cd /d "!repo!" 2>nul
+if errorlevel 1 (
+    echo    [x] diretorio nao encontrado
+    set /a FAIL+=1
+    set "FAILLIST=!FAILLIST! !rel!"
+    exit /b 0
+)
+rem The folder must be the repository git answers for, as in push.sh: otherwise
+rem every command below, the push included, acts on whatever repository git found.
+set "_top="
+for /f "delims=" %%t in ('git rev-parse --show-toplevel 2^>nul') do set "_top=%%t"
+if defined _top set "_top=!_top:/=\!"
+if /i not "!_top!"=="!repo!" (
+    echo    [x] o git nao responde por esta pasta como repositorio
+    set /a FAIL+=1
+    set "FAILLIST=!FAILLIST! !rel!"
+    exit /b 0
+)
 set "branch="
 for /f "delims=" %%b in ('git branch --show-current 2^>nul') do set "branch=%%b"
 echo    branch: !branch!
+
+rem A failing git status (unreadable index, dubious ownership) is a failure of
+rem this repository, never a count of zero files.
+git status --porcelain >nul 2>&1
+if errorlevel 1 (
+    echo    [x] o git nao consegue ler este repositorio ^(git status falhou^)
+    set /a FAIL+=1
+    set "FAILLIST=!FAILLIST! !rel!"
+    exit /b 0
+)
 
 rem Arquivos modificados/staged ainda nao commitados
 set "dirty=0"
@@ -171,13 +218,43 @@ rem falha, o `find /c` conta zero e o repo entrava na lista verde como se
 rem estivesse em dia - justamente no caso em que o push mais importa: commit
 rem local sem para onde ir. O lado .sh morria aqui (set -e sobre o pipefail);
 rem este lado mentia. Os dois erravam o mesmo caso, de jeitos diferentes.
+rem Nothing to send is not a failure: no remote, or a detached HEAD (see push.sh).
+set "_nrem=0"
+for /f %%n in ('git remote 2^>nul ^| find /c /v ""') do set "_nrem=%%n"
+if "!_nrem!"=="0" (
+    echo    [sem remote configurado - nada a enviar]
+    set "PARADOS=!PARADOS! !rel!(sem remote)"
+    exit /b 0
+)
+if not defined branch (
+    echo    [HEAD solto - nao ha branch para enviar]
+    set "PARADOS=!PARADOS! !rel!(HEAD solto)"
+    exit /b 0
+)
 set "upstream="
 for /f "delims=" %%u in ('git rev-parse --abbrev-ref --symbolic-full-name @{u} 2^>nul') do set "upstream=%%u"
+rem A configured upstream that does not resolve is a branch deleted on the
+rem remote, usually after its pull request merged: git push -u would recreate
+rem it, so the repair offered is the diagnosis, never the push.
 if not defined upstream (
-    set "locais=0"
-    for /f %%c in ('git rev-list --count HEAD 2^>nul') do set "locais=%%c"
-    echo    [x] sem upstream - !locais! commit^(s^) sem para onde ir
-    echo       conserto: git push -u origin !branch!
+    set "_merge="
+    for /f "delims=" %%m in ('git config --get "branch.%branch%.merge" 2^>nul') do set "_merge=%%m"
+    if defined _merge (
+        set "_urem=origin"
+        for /f "delims=" %%r in ('git config --get "branch.%branch%.remote" 2^>nul') do set "_urem=%%r"
+        echo    [x] upstream apagado no remoto - !branch! acompanhava !_urem!/!_merge:refs/heads/=!, que nao existe mais
+        echo    -^> nao recrie com git push -u: rode o pull.cmd, que diz se o trabalho ja esta na principal
+        set /a FAIL+=1
+        set "GONELIST=!GONELIST! !rel!"
+        exit /b 0
+    )
+    set "locais=?"
+    for /f %%c in ('git rev-list --count HEAD --not --remotes 2^>nul') do set "locais=%%c"
+    set "_dest="
+    for /f "delims=" %%r in ('git remote 2^>nul') do if not defined _dest set "_dest=%%r"
+    git remote 2>nul | findstr /x /c:"origin" >nul 2>&1 && set "_dest=origin"
+    echo    [x] sem upstream - !locais! commit^(s^) em nenhum remoto
+    echo       conserto: git push -u !_dest! !branch!
     set /a FAIL+=1
     set "NOUPSLIST=!NOUPSLIST! !rel!"
     exit /b 0
@@ -230,6 +307,22 @@ set "_p=%~1"
 set "_r=!_p:%BASE%\=!"
 set "ACHADOS=!ACHADOS!;!_r!"
 set /a NACHADOS+=1
+exit /b 0
+
+rem Acumula a pasta cuja .git esta vazia, ja relativa a BASE.
+:vazio
+set "_p=%~1"
+set "_r=!_p:%BASE%\=!"
+set "VAZIOS=!VAZIOS!;!_r!"
+exit /b 0
+
+rem What the .git of the folder in the first argument is, as in pull.cmd:
+rem errorlevel 0 = a repository (a .git that holds a HEAD, or a .git file, as a
+rem worktree has), 1 = no .git at all, 2 = a .git directory without a HEAD.
+:tipogit
+if not exist "%~1\.git" exit /b 1
+if exist "%~1\.git\HEAD" exit /b 0
+if exist "%~1\.git\" exit /b 2
 exit /b 0
 
 rem Aplica o -i. Sem -i, tudo entra.

@@ -85,9 +85,20 @@ casa() {
 
 # Auto-descobre todos os repositórios git sob a base, até 2 níveis
 # (BASE/repo e BASE/grupo/repo). Sempre reflete as pastas atuais.
-ACHADOS=()
+#
+# A `.git` directory counts only when it holds a HEAD, as in pull.sh since 1.9.5.
+# This side never got that check, and here an empty `.git` is worse than a
+# failure: git walks up from it, and when the folder above BASE is a repository,
+# push.sh pushed THAT repository under the group folder's name — reproduced in the
+# 14/11/2026 review, with `-d` set on the group's real repository.
+ACHADOS=(); VAZIOS=""
 while IFS= read -r gitdir; do
     repo="${gitdir%/.git}"
+    if [ ! -e "$gitdir/HEAD" ]; then
+        VAZIOS="$VAZIOS${repo#"$BASE"/}
+"
+        continue
+    fi
     ACHADOS+=("${repo#"$BASE"/}")
 done < <(find "$BASE" -maxdepth 3 -type d -name .git -prune 2>/dev/null | sort)
 
@@ -131,13 +142,18 @@ echo -e "${BOLD}$NOME v${VERSION} — base: ${BASE} (${#REPOS[@]} de ${#ACHADOS[
 [ -n "$EXCLUDE" ] && echo -e "${YELLOW}  -d fora: $(printf '%s' "$EXCLUDE" | tr '\n' ' ')${NC}"
 avisa_orfaos "$ONLY" "-i"
 avisa_orfaos "$EXCLUDE" "-d"
+while IFS= read -r vazio; do
+    if [ -n "$vazio" ]; then
+        echo -e "${YELLOW}  ⚠ $vazio/.git ignorado: diretório sem HEAD, não é repositório${NC}"
+    fi
+done <<< "$VAZIOS"
 
 if [ ${#REPOS[@]} -eq 0 ]; then
     echo -e "${RED}Nenhum repositório sobrou depois do -i/-d — nada a fazer.${NC}" >&2
     exit 1
 fi
 
-ok=(); warn=(); fail=(); noups=(); skipped=()
+ok=(); warn=(); fail=(); noups=(); gone=(); skipped=(); parados=()
 
 for repo in "${REPOS[@]}"; do
     echo -e "\n${CYAN}${BOLD}── $repo${NC}"
@@ -152,11 +168,29 @@ for repo in "${REPOS[@]}"; do
         fail+=("$repo"); continue
     fi
 
-    branch=$(git branch --show-current 2>/dev/null || echo "?")
-    echo -e "   branch: ${YELLOW}$branch${NC}"
+    # The folder must be the repository git answers for. If it is not — a damaged
+    # .git, or one git does not accept — every command below would act on whatever
+    # repository git found instead, and a push is the one command here that leaves
+    # the machine.
+    top=$(git rev-parse --show-toplevel 2>/dev/null || true)
+    if [ "$top" != "$(pwd -P)" ]; then
+        echo -e "   ${RED}✗ o git não responde por esta pasta como repositório (respondeu: ${top:-nenhum})${NC}"
+        fail+=("$repo"); continue
+    fi
 
-    # Arquivos modificados/staged ainda não commitados
-    dirty=$(git status --porcelain 2>/dev/null | wc -l | tr -d ' ')
+    branch=$(git branch --show-current 2>/dev/null || echo "?")
+    echo -e "   branch: ${YELLOW}${branch:-(HEAD solto)}${NC}"
+
+    # Arquivos modificados/staged ainda não commitados. A failing `git status`
+    # (unreadable index, dubious ownership) used to end the whole sweep: the
+    # pipeline's status reached the assignment and `set -e` exited with 128, with
+    # no summary and every later repository unpushed. 1.8.12 fixed that class of
+    # bug for `@{u}` only.
+    if ! st=$(git status --porcelain 2>/dev/null); then
+        echo -e "   ${RED}✗ o git não consegue ler este repositório (git status falhou)${NC}"
+        fail+=("$repo"); continue
+    fi
+    dirty=$(printf '%s' "$st" | grep -c '' || true)
     if [ "$dirty" -gt 0 ]; then
         echo -e "   ${RED}${BOLD}⚠  $dirty arquivo(s) com commit pendente!${NC}"
         warn+=("$repo")
@@ -172,15 +206,39 @@ for repo in "${REPOS[@]}"; do
     # them is the case where a push matters MOST, and it was landing in the
     # green list as "up-to-date". status.sh has told this case apart since
     # 1.5.1; the push never did.
+    # Nothing to send is not a failure: no remote at all, or a detached HEAD,
+    # where there is no branch to push. Both used to read "sem upstream" with
+    # `git push -u origin` as the repair, which names a remote that may not exist.
+    if [ -z "$(git remote 2>/dev/null)" ]; then
+        echo -e "   ${YELLOW}↷ sem remote configurado — nada a enviar${NC}"
+        parados+=("$repo(sem remote)"); continue
+    fi
+    if [ -z "$branch" ]; then
+        echo -e "   ${YELLOW}↷ HEAD solto — não há branch para enviar${NC}"
+        parados+=("$repo(HEAD solto)"); continue
+    fi
+
     if ! git rev-parse --abbrev-ref --symbolic-full-name '@{u}' >/dev/null 2>&1; then
-        locais=$(git rev-list --count HEAD 2>/dev/null || echo 0)
-        echo -e "   ${RED}${BOLD}✗ sem upstream${NC}${RED} — $locais commit(s) sem para onde ir${NC}"
-        echo -e "      ${YELLOW}conserto: git push -u origin ${branch:-<branch>}${NC}"
+        # An upstream that IS configured and does not resolve is a branch deleted
+        # on the remote, usually after its pull request merged. `git push -u` would
+        # recreate it — reproduced in the review — so the repair offered is the
+        # diagnosis that tells merged from unmerged, never the push.
+        merge_ref=$(git config --get "branch.$branch.merge" 2>/dev/null || true)
+        if [ -n "$merge_ref" ]; then
+            up_remote=$(git config --get "branch.$branch.remote" 2>/dev/null || echo origin)
+            echo -e "   ${RED}${BOLD}✗ upstream apagado no remoto${NC}${RED} — $branch acompanhava $up_remote/${merge_ref#refs/heads/}, que não existe mais${NC}"
+            echo -e "   ${GREEN}→ não recrie com git push -u: rode o pull.sh, que diz se o trabalho já está na principal${NC}"
+            gone+=("$repo"); continue
+        fi
+        locais=$(git rev-list --count HEAD --not --remotes 2>/dev/null || echo "?")
+        destino=$(git remote | grep -xF origin || git remote | head -n 1)
+        echo -e "   ${RED}${BOLD}✗ sem upstream${NC}${RED} — $locais commit(s) em nenhum remoto${NC}"
+        echo -e "      ${YELLOW}conserto: git push -u $destino $branch${NC}"
         noups+=("$repo"); continue
     fi
 
     # Commits prontos para push
-    pending=$(git log '@{u}..' --oneline 2>/dev/null | wc -l | tr -d ' ')
+    pending=$(git log '@{u}..' --oneline 2>/dev/null | wc -l | tr -d ' ') || pending=0
     if [ "$pending" -eq 0 ]; then
         echo -e "   ${YELLOW}Nada a enviar (up-to-date)${NC}"
         ok+=("$repo"); continue
@@ -198,6 +256,8 @@ echo -e "\n${BOLD}════════════════════�
 [ ${#ok[@]}      -gt 0 ] && echo -e "${GREEN}  ✓ OK:       ${ok[*]}${NC}"
 [ ${#warn[@]}    -gt 0 ] && echo -e "${YELLOW}  ⚠ Commitar: ${warn[*]}${NC}"
 [ ${#noups[@]}   -gt 0 ] && echo -e "${RED}  ✗ Sem upstream: ${noups[*]}${NC}"
+[ ${#gone[@]}    -gt 0 ] && echo -e "${RED}  ✗ Upstream apagado: ${gone[*]}${NC}"
 [ ${#fail[@]}    -gt 0 ] && echo -e "${RED}  ✗ Falhou:   ${fail[*]}${NC}"
 [ ${#skipped[@]} -gt 0 ] && echo -e "${YELLOW}  ↷ Pulado:   ${skipped[*]}${NC}"
+[ ${#parados[@]} -gt 0 ] && echo -e "${YELLOW}  ↷ Sem o que enviar: ${parados[*]}${NC}"
 echo ""
