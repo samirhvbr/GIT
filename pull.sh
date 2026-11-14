@@ -194,49 +194,130 @@ default_branch() {
     return 0
 }
 
-# A branch deleted on the remote is usually a branch whose pull request merged
-# and was cleaned up: nothing is at risk, and the repair is to leave it. The
-# other case, a branch deleted with commits the default branch never received,
-# needs a person. Both used to wear the same "branch apagada" label, so the
-# summary could not say which repair each repo needed.
+# Is the work of HEAD already in $1, a remote-tracking ref? It is when HEAD is an
+# ancestor of it, or when merging HEAD into it would not change its tree, which
+# is what a squash or rebase merge leaves behind. Read-only.
+landed_in() {
+    local ref="$1" ahead tree
+    ahead=$(git rev-list --count HEAD --not "$ref" 2>/dev/null) || return 1
+    [ "$ahead" -eq 0 ] && return 0
+    tree=$(git merge-tree --write-tree "$ref" HEAD 2>/dev/null) || return 1
+    [ "$tree" = "$(git rev-parse "$ref^{tree}")" ]
+}
+
+# Looks for the work of HEAD in the default branch of the tracking remote ($2)
+# first and then in every other remote. A contribution does not land in the fork
+# its branch was pushed to: the pull request is merged in the upstream, usually
+# by squash, and the fork's branch is deleted afterwards. Comparing only with the
+# tracking remote called nine such clones "N commit(s) fora de origin/main" in the
+# 14/11/2026 sweep, when the pull request had merged with the very commit at HEAD.
 #
-# The work counts as landed when HEAD is an ancestor of the default branch, or
-# when merging HEAD into it would not change its tree, which is what a squash
-# or rebase merge leaves behind. When neither holds, the commits are counted
-# and nothing is claimed.
+# A local upstream/main is only as new as the last fetch from that remote, which
+# for a contribution clone is the day it was set up, so the default branch of each
+# remote is fetched here before the comparison. Only that one branch, never a
+# prune. The remote in $3 is skipped: the pull that failed has just fetched it.
 #
-# Landed commits say nothing about the working tree, and the repair is a
-# `git switch`: with modified tracked files it either refuses or carries them
-# onto the default branch. So a landed branch whose tracked files are modified
-# (staged or not) gets its own reason and no switch command. Untracked files
-# are not counted; they only matter if they collide, and the switch says so.
+# Sets lrem/ldef and returns 0 when some remote holds the work. Either way
+# prem/pdef/pahead describe the tracking remote, for the "N commit(s) fora de"
+# message of the caller; pahead stays empty when that cannot be measured.
+find_landing() {
+    local branch="$1" first="$2" fresh="$3" rem def
+    lrem=""; ldef=""; prem="$first"; pdef=""; pahead=""
+    for rem in $first $(git remote 2>/dev/null | grep -vxF "$first" || true); do
+        [ -n "$rem" ] || continue
+        def=$(default_branch "$rem")
+        [ "$rem" = "$first" ] && pdef="$def"
+        [ -n "$def" ] && [ "$def" != "$branch" ] || continue
+        if [ "$rem" != "$fresh" ]; then
+            GIT_TERMINAL_PROMPT=0 git fetch --quiet --no-tags "$rem" "$def" >/dev/null 2>&1 || true
+        fi
+        git rev-parse --verify --quiet "refs/remotes/$rem/$def" >/dev/null || continue
+        if [ "$rem" = "$first" ]; then
+            pahead=$(git rev-list --count HEAD --not "$rem/$def" 2>/dev/null || true)
+        fi
+        if landed_in "$rem/$def"; then lrem="$rem"; ldef="$def"; return 0; fi
+    done
+    return 1
+}
+
+# The last resort for a branch deleted on the remote, when git alone cannot tell
+# but the forge can. A pull request merged by squash, or rebased after the default
+# branch had moved on, leaves no commit at HEAD in the history and no tree that
+# still compares equal, and in that state a clone that pulls weeks later looks
+# unmerged: zapfast, projectfw and repodocs did, in the 14/11/2026 sweep. The pull
+# request itself still records the head commit it was merged with. When `gh` is
+# installed and logged in, every GitHub remote is asked for merged pull requests
+# from this branch, and the work counts as landed only when one of them was merged
+# with exactly the commit at HEAD: a branch with commits made after the merge does
+# not. Sets lrem/ldef/lpr. Silent, and a plain "no", when `gh` is missing or no
+# remote is on GitHub.
+landed_by_pr() {
+    local branch="$1" head rem url slug def num oid
+    command -v gh >/dev/null 2>&1 || return 1
+    head=$(git rev-parse HEAD 2>/dev/null) || return 1
+    lrem=""; ldef=""; lpr=""
+    for rem in $(git remote 2>/dev/null); do
+        url=$(git config --get "remote.$rem.url" 2>/dev/null) || continue
+        case "$url" in
+            git@github.com:*)       slug="${url#git@github.com:}" ;;
+            ssh://git@github.com/*) slug="${url#ssh://git@github.com/}" ;;
+            https://github.com/*)   slug="${url#https://github.com/}" ;;
+            *) continue ;;
+        esac
+        slug="${slug%.git}"; slug="${slug%/}"
+        def=$(default_branch "$rem")
+        [ -n "$def" ] || continue
+        while read -r num oid; do
+            if [ -n "$oid" ] && [ "$oid" = "$head" ]; then
+                lrem="$rem"; ldef="$def"; lpr="$num"; return 0
+            fi
+        done < <(GH_PROMPT_DISABLED=1 gh pr list -R "$slug" --state merged --head "$branch" --limit 10 \
+                     --json number,headRefOid --jq '.[] | [.number, .headRefOid] | @tsv' 2>/dev/null || true)
+    done
+    return 1
+}
+
+# The work of HEAD is already in $1/$2, and the repair is a `git switch`. Whether
+# that is safe depends on the working tree, not on the commits: with modified
+# tracked files (staged or not) the switch either refuses or carries them onto the
+# default branch. So a landed branch whose tracked files are modified gets the
+# reason in $4 and no switch command; a clean one gets the reason in $3. Untracked
+# files are not counted; they only matter if they collide, and the switch says so.
 # Read-only; sets `motivo`, `detalhe`, `dica`, `alvo`.
+mark_landed() {
+    local rem="$1" def="$2" sujos
+    sujos=$(git status --porcelain --untracked-files=no 2>/dev/null | wc -l | tr -d ' ')
+    if [ "${sujos:-0}" -gt 0 ]; then
+        motivo="$4"
+        detalhe="o trabalho já está em $rem/$def, mas há alterações não commitadas em $sujos arquivo(s) rastreado(s)"
+        dica="git status --short — guarde ou commite as alterações antes de trocar para $def"
+    else
+        motivo="$3"
+        detalhe="o trabalho já está em $rem/$def"
+        dica="git switch $def && git pull --ff-only"
+        alvo="→$def"
+    fi
+}
+
+# A branch deleted on the remote is usually a branch whose pull request merged and
+# was cleaned up: nothing is at risk, and the repair is to leave it. The other
+# case, a branch deleted with commits no default branch ever received, needs a
+# person. Both used to wear the same "branch apagada" label, so the summary could
+# not say which repair each repo needed. When the work is nowhere, the commits are
+# counted against the tracking remote and nothing is claimed. Read-only apart from
+# the fetch in find_landing and the question to the forge in landed_by_pr; sets
+# `motivo`, `detalhe`, `dica`, `alvo`.
 diagnose_deleted_branch() {
-    local branch="$1" remote def ahead tree sujos
+    local branch="$1" remote
     motivo="branch apagada no remoto"; detalhe=""; dica=""; alvo=""
     remote=$(git config "branch.$branch.remote" 2>/dev/null || echo origin)
-    def=$(default_branch "$remote")
-    if [ -z "$def" ] || [ "$def" = "$branch" ] \
-       || ! git rev-parse --verify --quiet "refs/remotes/$remote/$def" >/dev/null; then
-        return 0
-    fi
-    ahead=$(git rev-list --count HEAD --not "$remote/$def" 2>/dev/null) || return 0
-    if [ "$ahead" -eq 0 ] \
-       || { tree=$(git merge-tree --write-tree "$remote/$def" HEAD 2>/dev/null) \
-            && [ "$tree" = "$(git rev-parse "$remote/$def^{tree}")" ]; }; then
-        sujos=$(git status --porcelain --untracked-files=no 2>/dev/null | wc -l | tr -d ' ')
-        if [ "${sujos:-0}" -gt 0 ]; then
-            motivo="branch apagada, árvore suja"
-            detalhe="o trabalho já está em $remote/$def, mas há alterações não commitadas em $sujos arquivo(s) rastreado(s)"
-            dica="git status --short — guarde ou commite as alterações antes de trocar para $def"
-        else
-            motivo="branch apagada, já na principal"
-            detalhe="o trabalho já está em $remote/$def"
-            dica="git switch $def && git pull --ff-only"
-            alvo="→$def"
-        fi
-    else
-        detalhe="$ahead commit(s) fora de $remote/$def; confira antes de trocar de branch"
+    if find_landing "$branch" "$remote" "$remote"; then
+        mark_landed "$lrem" "$ldef" "branch apagada, já na principal" "branch apagada, árvore suja"
+    elif landed_by_pr "$branch"; then
+        mark_landed "$lrem" "$ldef" "branch apagada, já na principal" "branch apagada, árvore suja"
+        detalhe="$detalhe — PR #$lpr mesclado com este mesmo commit"
+    elif [ -n "$pahead" ] && [ -n "$pdef" ]; then
+        detalhe="$pahead commit(s) fora de $prem/$pdef; confira antes de trocar de branch"
     fi
     return 0
 }

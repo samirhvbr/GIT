@@ -11,8 +11,25 @@ export GIT_AUTHOR_NAME=test GIT_AUTHOR_EMAIL=test@example.com
 export GIT_COMMITTER_NAME=test GIT_COMMITTER_EMAIL=test@example.com
 
 BASE="$WORK/base"
-mkdir -p "$BASE/git" "$WORK/remotes"
+mkdir -p "$BASE/git" "$WORK/remotes" "$WORK/bin" "$WORK/gh"
 cp "$ROOT/pull.sh" "$BASE/git/pull.sh"
+
+# A fake `gh` ahead of any real one: `gh pr list -R owner/repo ...` prints the
+# lines "NUMBER HEAD_OID" kept in $WORK/gh/owner__repo, one per merged pull
+# request, or fails like gh does for a repository it cannot see.
+cat > "$WORK/bin/gh" <<'GH'
+#!/bin/bash
+slug=""
+while [ $# -gt 0 ]; do
+    [ "$1" = "-R" ] && slug="$2"
+    shift
+done
+f="$GH_FAKE_DIR/${slug//\//__}"
+[ -f "$f" ] || exit 1
+cat "$f"
+GH
+chmod +x "$WORK/bin/gh"
+export GH_FAKE_DIR="$WORK/gh" PATH="$WORK/bin:$PATH"
 
 commit() {
     local dir="$1" file="$2" text="$3"
@@ -50,9 +67,53 @@ forge() {
     git -C "$dir" push -q origin --delete feat
 }
 
+# A contribution: the branch is pushed to the fork (origin), the pull request is
+# squash-merged in the upstream, and the fork's branch is deleted. The clone
+# fetched the upstream once, when it was set up, so its local upstream/main is
+# older than the squash: only a fetch of that remote can show the work landed.
+# $2 is "squash" (the pull request merged) or "none" (it never did).
+new_contrib() {
+    local name="$1" how="$2" up="$WORK/remotes/$1-upstream.git" fork="$WORK/remotes/$1.git"
+    local seed="$WORK/seed-$1" dir="$WORK/forge-$1" i
+    git init -q -b main "$seed"
+    commit "$seed" file base
+    git clone -q --bare "$seed" "$up"
+    git clone -q --bare "$up" "$fork"
+    git clone -q "$fork" "$BASE/GRP/$name"
+    git -C "$BASE/GRP/$name" remote add upstream "$up"
+    git -C "$BASE/GRP/$name" fetch -q upstream
+    git -C "$BASE/GRP/$name" switch -qc feat
+    for i in 1 2; do commit "$BASE/GRP/$name" file "feat $i"; done
+    git -C "$BASE/GRP/$name" push -q -u origin feat
+    git clone -q "$up" "$dir"
+    if [[ "$how" == squash || "$how" == squash-rewrite ]]; then
+        git -C "$dir" fetch -q "$fork" feat
+        git -C "$dir" merge -q --squash FETCH_HEAD >/dev/null
+        git -C "$dir" commit -qm "squash feat"
+    fi
+    [[ "$how" == squash-rewrite ]] && { printf 'rewritten upstream\n' > "$dir/file"; git -C "$dir" commit -qam "rewrite file"; }
+    commit "$dir" other "later work upstream"
+    git -C "$dir" push -q origin main
+    git -C "$fork" branch -D feat >/dev/null
+    # The remotes read as GitHub URLs (that is what `gh` is asked about) and are
+    # served by the local bare repositories.
+    git -C "$BASE/GRP/$name" config "url.$fork.insteadOf" "https://github.com/me/$name.git"
+    git -C "$BASE/GRP/$name" config "url.$up.insteadOf" "https://github.com/up/$name.git"
+    git -C "$BASE/GRP/$name" remote set-url origin "https://github.com/me/$name.git"
+    git -C "$BASE/GRP/$name" remote set-url upstream "https://github.com/up/$name.git"
+}
+
 new_repo merged main 1;    forge merged main merge
 new_repo squashed master 2; forge squashed master squash
 new_repo unmerged main 1;  forge unmerged main none
+
+new_contrib contrib squash
+new_contrib contribopen none
+new_contrib prmerged squash-rewrite
+new_contrib prextra squash-rewrite
+
+printf '7 %s\n' "$(git -C "$BASE/GRP/prmerged" rev-parse HEAD)" > "$WORK/gh/up__prmerged"
+printf '8 %s\n' "$(git -C "$BASE/GRP/prextra" rev-parse HEAD~1)" > "$WORK/gh/up__prextra"
 
 # Landed like `merged`, but the working tree is not clean. Modified tracked
 # files (staged or not) make the switch unsafe; an untracked file does not.
@@ -78,19 +139,22 @@ expect "✗ branch apagada, já na principal — o trabalho já está em origin/
 expect "✗ branch apagada, já na principal — o trabalho já está em origin/master"
 expect "→ git switch master && git pull --ff-only"
 expect "✗ branch apagada no remoto — 1 commit(s) fora de origin/main; confira antes de trocar de branch"
-expect "branch apagada, já na principal: GRP/merged→main GRP/squashed→master GRP/untracked→main"
+expect "branch apagada, já na principal: GRP/contrib→main GRP/merged→main GRP/prmerged→main GRP/squashed→master GRP/untracked→main"
 expect "branch apagada, árvore suja: GRP/staged GRP/unstaged"
-expect "branch apagada no remoto: GRP/unmerged"
+expect "✗ branch apagada, já na principal — o trabalho já está em upstream/main"
+expect "✗ branch apagada no remoto — 2 commit(s) fora de origin/main; confira antes de trocar de branch"
+expect "branch apagada no remoto: GRP/contribopen GRP/prextra GRP/unmerged"
+expect "o trabalho já está em upstream/main — PR #7 mesclado com este mesmo commit"
 expect "✗ branch apagada, árvore suja — o trabalho já está em origin/main, mas há alterações não commitadas em 1 arquivo(s) rastreado(s)"
 expect "→ git status --short — guarde ou commite as alterações antes de trocar para main"
 
-# The switch command is offered to the two clean landed clones and to nobody
-# else: merged and untracked (squashed is on master).
+# The switch command is offered to the four clean landed clones on main and to
+# nobody else: contrib, merged, prmerged and untracked (squashed is on master).
 switches="$(grep -cF -- '→ git switch main && git pull --ff-only' <<<"$out")"
-[[ "$switches" == 2 ]] || { printf 'switch offered %s times, expected 2\n\n%s\n' "$switches" "$out" >&2; exit 1; }
+[[ "$switches" == 4 ]] || { printf 'switch offered %s times, expected 4\n\n%s\n' "$switches" "$out" >&2; exit 1; }
 
 # The diagnosis only reads: every clone is still on the branch it was on.
-for name in merged squashed unmerged staged unstaged untracked; do
+for name in contrib contribopen prmerged prextra merged squashed unmerged staged unstaged untracked; do
     [[ "$(git -C "$BASE/GRP/$name" branch --show-current)" == feat ]] \
         || { printf '%s left branch feat\n' "$name" >&2; exit 1; }
 done

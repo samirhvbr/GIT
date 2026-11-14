@@ -13,6 +13,61 @@ never rewritten.
 > reconstructing them now would produce a plausible history rather than a true
 > one.
 
+## 1.9.7 - pull finds a deleted branch whose work landed in any remote or by pull request
+
+Eight clones in the 14/11/2026 sweep were filed under `branch apagada no remoto`
+with `N commit(s) fora de <fork>/<default>; confira antes de trocar de branch`:
+`ai-memory-web-contrib`, `gv_music-contrib`, `redisover-contrib`,
+`youpi-pg-contrib`, `ai-jail`, `deckcraft`, `projectfw-audit` and
+`repodocs-projectfw-release`. In every one the pull request had merged with
+exactly the commit at `HEAD`: `gh pr list --state merged --head <branch>` returned
+a head commit equal to the local one (PRs #6, #3, #4, #85, #190, #1 and #3, and
+deckcraft's #1187). Nothing was at risk; the warning was wrong, and it was wrong
+in three different ways.
+
+- **Only the tracking remote was compared.** The branch was pushed to a fork, and
+  `diagnose_deleted_branch` asked whether `HEAD` was in the fork's default
+  branch. A contribution is merged in the upstream. Six of the eight were plain
+  ancestors of the upstream's default branch.
+- **That remote's refs were as old as the clone.** The pull that fails fetches the
+  tracking remote only, so `upstream/main` still held whatever it held when the
+  clone was set up, before the pull request merged.
+- **For two of them git has nothing left to compare.** `projectfw-audit` and
+  `repodocs-projectfw-release` merged as #1 and #3, and `HEAD` is neither an
+  ancestor of `origin/master` nor tree-equal to it (the 1.9.3 test: merging `HEAD`
+  into the default branch would not change its tree). The merge was not a plain
+  one, and by the time of the sweep `origin/master` was 155 and 4 commits ahead,
+  so a comparison that could have held the day after the merge no longer does.
+  Only the forge still knows.
+
+`find_landing` now tries the tracking remote first and then every other remote,
+fetching each one's default branch (that one branch; never a prune) before it
+compares, except for the remote the failed pull has just fetched. When git alone
+says no, `landed_by_pr` asks `gh pr list --state merged --head <branch>` of every
+GitHub remote and counts the work as landed only when a pull request was merged
+with exactly the commit at `HEAD`: a branch with commits made after the merge is
+still reported with its commit count. Without `gh`, or with no GitHub remote, that
+step answers "no" silently and the behavior is the one before. The summary line
+names the proof: `o trabalho já está em origin/master — PR #1 mesclado com este
+mesmo commit`.
+
+Replayed against copies of the eight clones, with the old branch checked out, the
+1.9.6 `pull.sh` reported all eight as `branch apagada no remoto`; this one reports
+all eight as `branch apagada, já na principal` with
+`git switch <default> && git pull --ff-only`, six by ancestry in the upstream and
+the two `projectfw`/`repodocs` ones by the pull request. The originals were not
+touched.
+
+`tests/pull_deleted_branch_test.sh` gains four clones with a fork and an upstream:
+`contrib` (squash-merged upstream, local `upstream/main` older than the squash),
+`contribopen` (never merged: still `2 commit(s) fora de origin/main`), `prmerged`
+(the upstream rewrites the file after the squash, so only the pull request proves
+it) and `prextra` (the pull request merged an older commit than `HEAD`: not
+landed). A fake `gh` ahead of the real one answers from files, so the test needs
+no network and no login. It fails on the previous commit's `pull.sh`. `pull.cmd`
+carries the same logic in `:acha_pouso`, `:pouso_um`, `:pr_mesclada` and
+`:marca_pouso`; it was not executed: no cmd interpreter on this machine.
+
 ## 1.9.7 - pull sets a detached HEAD and a repository with no remote apart from the failures
 
 The 14/11/2026 sweep over 173 repositories ended with 27 in the failure list, and
