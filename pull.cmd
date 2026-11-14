@@ -88,6 +88,7 @@ set "MOT_UPLOCAL="
 set "MOT_MERGEADA="
 set "MOT_APAGSUJA="
 set "MOT_APAGADA="
+set "MOT_DIVPRINC="
 set "MOT_DIVERGIU="
 set "MOT_SUJA="
 set "MOT_CONFLITO="
@@ -178,6 +179,7 @@ if defined FAILLIST (
     if defined MOT_MERGEADA echo       branch apagada, ja na principal:!MOT_MERGEADA!
     if defined MOT_APAGSUJA echo       branch apagada, arvore suja:!MOT_APAGSUJA!
     if defined MOT_APAGADA  echo       branch apagada no remoto:!MOT_APAGADA!
+    if defined MOT_DIVPRINC echo       divergiu, ja no remoto:!MOT_DIVPRINC!
     if defined MOT_DIVERGIU echo       divergiu do remoto:!MOT_DIVERGIU!
     if defined MOT_SUJA     echo       arvore suja:!MOT_SUJA!
     if defined MOT_CONFLITO echo       conflito:!MOT_CONFLITO!
@@ -238,6 +240,7 @@ if "!RC!"=="0" (
     set "ALVO="
     if "!MOTKEY!"=="APAGADA" call :apagada "!branch!"
     if "!MOTKEY!"=="UPSTREAM" call :semup "!branch!"
+    if "!MOTKEY!"=="DIVERGIU" call :diverge "!branch!"
     set "LINHA=x !MOTIVO!"
     if defined DETALHE set "LINHA=!LINHA! - !DETALHE!"
     echo    !LINHA!
@@ -506,6 +509,69 @@ if not errorlevel 1 (
 set "MOTIVO=sem upstream, so local"
 set "MOTKEY=UPLOCAL"
 if defined PAHEAD if defined PDEF set "DETALHE=branch nunca publicada: %PAHEAD% commit(s) fora de %PREM%/%PDEF%"
+exit /b 0
+
+rem Same diagnosis as diagnose_diverged in pull.sh. The plain divergence reason
+rem stood for two situations that need opposite answers. Every non-merge commit of
+rem the branch may already have its patch in the upstream (a rebase merge, a
+rem cherry-pick, a force-pushed rewrite): nothing is at risk and only the history
+rem differs. Or some commits exist nowhere else, which is a real divergence and
+rem needs a person; there the message gives the numbers. Only the patches count,
+rem not the tree comparison of :pouso_um: merging HEAD into the upstream changes
+rem nothing when the upstream merged the same work and then reverted it, and that
+rem is not already there. Merge commits are not judged by git cherry, so they are
+rem counted and named, never claimed. Landed on a branch with a name of its own,
+rem the repair is to switch to the branch it tracks; landed on the branch that IS
+rem the upstream, git rebase drops exactly the commits the upstream already has,
+rem and with modified tracked files it would refuse. Sets MOTIVO, MOTKEY, DETALHE,
+rem DICA and ALVO.
+:diverge
+set "_up="
+for /f "delims=" %%u in ('git rev-parse --abbrev-ref --symbolic-full-name "@{u}" 2^>nul') do set "_up=%%u"
+if not defined _up exit /b 0
+set "_a="
+set "_b="
+for /f "tokens=1,2" %%a in ('git rev-list --left-right --count "HEAD...%_up%" 2^>nul') do (
+    set "_a=%%a"
+    set "_b=%%b"
+)
+if not defined _b exit /b 0
+set "_nm=0"
+for /f %%n in ('git rev-list --no-merges --count HEAD --not "%_up%" 2^>nul') do set "_nm=%%n"
+set /a _mg=_a-_nm
+set "_nota="
+if %_mg% gtr 0 set "_nota= - mais %_mg% merge(s), que o git cherry nao compara"
+for /f "tokens=1* delims=/" %%x in ("%_up%") do (
+    set "_rem=%%x"
+    set "_ubr=%%y"
+)
+call :patches_em "%_up%"
+if errorlevel 1 goto diverge_nao
+if /i "!_ubr!"=="%~1" goto diverge_mesma
+call :marca_pouso "!_rem!" "!_ubr!" "divergiu, ja no remoto" "divergiu do remoto" DIVPRINC DIVERGIU
+set "DETALHE=!DETALHE!!_nota!"
+exit /b 0
+:diverge_mesma
+set "_sujo=0"
+for /f %%n in ('git status --porcelain --untracked-files=no 2^>nul ^| find /c /v ""') do set "_sujo=%%n"
+if not "%_sujo%"=="0" goto diverge_suja
+set "MOTIVO=divergiu, ja no remoto"
+set "MOTKEY=DIVPRINC"
+set "DETALHE=os !_nm! commit(s) locais ja estao em !_up!; so o historico divergiu (!_b! no remoto)!_nota!"
+set "DICA=git rebase - descarta so os commits locais que !_up! ja tem"
+exit /b 0
+:diverge_suja
+set "DETALHE=os !_nm! commit(s) locais ja estao em !_up!, mas ha alteracoes nao commitadas em %_sujo% arquivo(s) rastreado(s)!_nota!"
+set "DICA=git status --short - guarde ou commite as alteracoes antes do rebase"
+exit /b 0
+:diverge_nao
+if "%_nm%"=="0" goto diverge_merges
+set "_novos=0"
+for /f %%n in ('git cherry "%_up%" HEAD 2^>nul ^| findstr /b /c:"+" ^| find /c /v ""') do set "_novos=%%n"
+set "DETALHE=%_a% commit(s) local, %_b% no remoto; %_novos% de %_nm% sem equivalente em %_up% (git cherry)"
+exit /b 0
+:diverge_merges
+set "DETALHE=%_a% commit(s) local, todos merges; %_b% no remoto"
 exit /b 0
 
 rem Acumula o repo na lista do motivo. O nome da variavel e montado:

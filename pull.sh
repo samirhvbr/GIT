@@ -374,6 +374,59 @@ diagnose_no_upstream() {
     return 0
 }
 
+# "divergiu do remoto" stood for two situations that need opposite answers. Every
+# non-merge commit of the branch may already have its patch in the upstream (a
+# rebase merge, a cherry-pick, a force-pushed rewrite): nothing is at risk and only
+# the history differs, which is what b3dev_janelinha_project was in the 14/11/2026
+# sweep, five commits all present in origin/master on a branch that tracked master
+# by mistake. Or some commits exist nowhere else, which is a real divergence and
+# needs a person; there the message gives the numbers the bare label did not.
+#
+# Only the patches count here, not the tree comparison that landed_in also makes.
+# Merging HEAD into the upstream changes nothing when the upstream merged the same
+# work and then reverted it, and that is not "already there": Netflix-API's QA
+# branch merged three contributions that the maintainer took out again, and a
+# label saying the work had landed would have hidden that decision. Merge commits
+# are not judged by `git cherry`, so they are counted and named, never claimed.
+#
+# Landed on a branch with a name of its own, the repair is to leave it and switch
+# to the branch it tracks. Landed on the branch that IS the upstream (a stale copy
+# of a history the remote rewrote), `git rebase` drops exactly the commits the
+# upstream already has; with modified tracked files it would refuse, so those get
+# the base reason and the status hint. Read-only; sets `motivo`, `detalhe`, `dica`,
+# `alvo`.
+diagnose_diverged() {
+    local branch="$1" up rem ubr ahead behind nm novos sujos nota=""
+    motivo="divergiu do remoto"; detalhe=""; dica=""; alvo=""
+    up=$(git rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null) || return 0
+    read -r ahead behind < <(git rev-list --left-right --count "HEAD...$up" 2>/dev/null) || return 0
+    nm=$(git rev-list --no-merges --count HEAD --not "$up" 2>/dev/null || echo 0)
+    [ $((ahead - nm)) -gt 0 ] && nota=" — mais $((ahead - nm)) merge(s), que o git cherry não compara"
+    rem="${up%%/*}"; ubr="${up#*/}"
+    if patches_in "$up"; then
+        if [ "$ubr" != "$branch" ]; then
+            mark_landed "$rem" "$ubr" "divergiu, já no remoto" "divergiu do remoto"
+            detalhe="$detalhe$nota"
+        else
+            sujos=$(git status --porcelain --untracked-files=no 2>/dev/null | wc -l | tr -d ' ')
+            if [ "${sujos:-0}" -gt 0 ]; then
+                detalhe="os $nm commit(s) locais já estão em $up, mas há alterações não commitadas em $sujos arquivo(s) rastreado(s)$nota"
+                dica="git status --short — guarde ou commite as alterações antes do rebase"
+            else
+                motivo="divergiu, já no remoto"
+                detalhe="os $nm commit(s) locais já estão em $up; só o histórico divergiu ($behind no remoto)$nota"
+                dica="git rebase — descarta só os commits locais que $up já tem"
+            fi
+        fi
+    elif [ "$nm" -eq 0 ]; then
+        detalhe="$ahead commit(s) local, todos merges; $behind no remoto"
+    else
+        novos=$(git cherry "$up" HEAD 2>/dev/null | grep -c '^+' || true)
+        detalhe="$ahead commit(s) local, $behind no remoto; $novos de $nm sem equivalente em $up (git cherry)"
+    fi
+    return 0
+}
+
 ok=(); fail=(); fail_reason=(); fail_alvo=(); skipped=(); parados=()
 
 for repo in "${REPOS[@]}"; do
@@ -424,6 +477,8 @@ for repo in "${REPOS[@]}"; do
             diagnose_deleted_branch "$branch"
         elif [ "$motivo" = "sem upstream" ]; then
             diagnose_no_upstream "$branch"
+        elif [ "$motivo" = "divergiu do remoto" ]; then
+            diagnose_diverged "$branch"
         fi
         echo -e "   ${RED}✗ $motivo${detalhe:+ — $detalhe}${NC}"
         if [ -n "$dica" ]; then echo -e "   ${GREEN}→ $dica${NC}"; fi
@@ -440,7 +495,8 @@ if [ ${#fail[@]} -gt 0 ]; then
     for motivo in "sem upstream" "sem upstream, já na principal" \
                   "sem upstream, só local" "branch apagada, já na principal" \
                   "branch apagada, árvore suja" \
-                  "branch apagada no remoto" "divergiu do remoto" \
+                  "branch apagada no remoto" "divergiu, já no remoto" \
+                  "divergiu do remoto" \
                   "árvore suja" "conflito" "remoto inacessível" \
                   "diretório não encontrado" "outro"; do
         linha=""; i=0

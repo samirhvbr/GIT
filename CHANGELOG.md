@@ -13,6 +13,72 @@ never rewritten.
 > reconstructing them now would produce a plausible history rather than a true
 > one.
 
+## 1.9.7 - pull tells a diverged branch whose patches are already upstream from a real divergence
+
+`git pull --ff-only` fails on a diverged branch with a message that says nothing
+about how it diverged, and the summary line was just `divergiu do remoto`. Five
+repositories wore it in the 14/11/2026 sweep, and they were not the same:
+
+- `b3dev/b3dev_janelinha_project`, on `codex/cartolina-validacao-conjunta-20261030`,
+  had five commits ahead and 107 behind, and `git cherry origin/master` marks all
+  five `-`: every patch is already on `master`. The branch also tracked `master`
+  (`branch.<name>.merge = refs/heads/master`), so the pull tried to fast-forward a
+  feature branch onto it. Nothing was at risk; the clone only needed to leave it.
+- `audi`, on `master`, had four commits ahead (0.1.14 to 0.1.17, the photo
+  reading) and ten behind, and all four are `+`: fourteen of the twenty-seven
+  files they touch do not exist on `origin/master`. A real divergence, and it
+  needs a person.
+- `0forks/Netflix-API`, `000/shvia-web-docs-20261106` and
+  `000/shvia-web-flake-20261106` are the cases in between, below.
+
+`diagnose_diverged` reads the counts and the patches. When every non-merge commit
+of the branch has its patch in the upstream (`patches_in`, the check the previous
+commit added), the reason is `divergiu, já no remoto`. On a branch with a name of
+its own, the hint is `git switch <tracked branch> && git pull --ff-only`, as for a
+deleted branch. When the branch IS the upstream's branch (a stale copy of a
+history the remote rewrote) the hint is `git rebase`, which drops exactly the
+commits the upstream already has; with modified tracked files it would refuse, so
+the reason stays `divergiu do remoto` and the hint is `git status --short`. A real
+divergence now says what it is made of: `4 commit(s) local, 10 no remoto; 4 de 4
+sem equivalente em origin/master (git cherry)`.
+
+**Only the patches count here, and that is a correction.** A first version also
+used the tree test that `landed_in` makes for a deleted branch (merging `HEAD`
+into the upstream would not change its tree). Replayed against a copy of the real
+`Netflix-API`, it called the clone `divergiu, já no remoto — o trabalho já está em
+upstream/master` and printed `git switch master`. The branch is an integration
+branch whose three commits are merges of contributions that the maintainer merged
+and then reverted. Merging it changes nothing, because the upstream already "has"
+those commits, but the work is not there: it was taken out. A line saying it had
+landed would have hidden that decision. `tests/pull_diverged_test.sh` now builds
+that story (`reverted`) and fails on that first version. `git cherry` does not
+judge merge commits, so they are counted and named, never claimed: the same clone
+now reads `3 commit(s) local, todos merges; 11 no remoto`, and a branch whose
+non-merge commits all match but which also carries merges says how many.
+
+The two `shvia-web` clones stay `divergiu do remoto`, with their counts (`2
+commit(s) local, 2 no remoto; 1 de 2 sem equivalente`). Their local commits carry
+`(versão no merge)` in the subject and the CHANGELOG, the remote's carry the
+version the watcher stamped at merge, so the patches differ by exactly that. With
+the CHANGELOG and `version.md` left out the patch ids are equal; the script does
+not know about that stamp and does not guess it.
+
+The words "landed" and "já na principal" of the deleted-branch and no-upstream
+diagnoses mean that the work went through the default branch, by ancestry, by an
+equal tree, by patches or by a merged pull request. They do not say the
+maintainers kept it, and they are not meant to: those branches are gone from the
+remote or never had one, and the repair they offer, `git switch`, deletes
+nothing. A diverged branch is still on the remote and is being asked to be
+dropped, which is why it gets the stricter reading.
+
+`tests/pull_diverged_test.sh` builds `rebased` (two commits cherry-picked into a
+`main` that has since edited the same file, branch tracking `main`), `samename`
+(the remote force-pushed the same two patches over a new base), `dirty` (the
+same, with a modified file), `real` (two commits nowhere else) and `reverted`. It
+checks the reasons, the hints, the counts and the grouped summary lines, and that
+no clone moved, lost a commit or lost its modified file. `pull.cmd` carries the
+same in `:diverge`; it was not executed: no cmd interpreter on this machine.
+
 ## 1.9.7 - pull tells a branch with no upstream apart: set it, already landed, or never published
 
 `git pull` on a branch with no upstream fails the same way whatever the reason,
