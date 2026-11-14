@@ -13,6 +13,34 @@ never rewritten.
 > reconstructing them now would produce a plausible history rather than a true
 > one.
 
+## 1.9.8 - release.sh and the release workflow are resynchronised with repodocs
+
+The 14/11/2026 review found this repository's `tools/release.sh` 169 lines behind
+the one in repodocs, and the defects it found there are the ones repodocs had
+already fixed. Measured on GitHub the same day:
+
+- five versions in the log have no tag and no Release (1.8.2, 1.8.11, 1.8.12,
+  1.8.13 and 1.9.2), because a push that carried several bumps only published
+  the one at its tip;
+- the 1.9.7 Release holds the README section alone, 965 characters, because the
+  notes stopped at the first `##` heading of the version;
+- the 1.8.1 Release body reads `## Commits- 1.8.1 - …` on one line, because the
+  fallback's blank lines were lost.
+
+Running the documented repair, `--backfill`, with the old script would have made
+it worse: nothing in it reconciled the `Latest` badge, and every Release it
+created without `--latest` takes the badge by GitHub's default, so the last one
+backfilled — 1.9.2 — would have ended up `Latest`.
+
+Both files now come from repodocs as they are. `release.sh` fetches before it
+reads, takes the notes from the commit's own `CHANGELOG.md` and gathers every
+section of the version, matches a version exactly instead of by prefix, gives
+`--latest` only to the version `version.md` names (`--latest=false` to the rest)
+and moves a drifted badge back, and counts a rate-limit stop as a failure. The
+workflow pins `actions/checkout` by commit SHA, reads `vars.CI_RUNNER`, and fires
+on any branch but publishes only from the default one. The missing Releases and
+the 1.9.7 notes are repaired after this push, with this script.
+
 ## 1.9.7 - the READMEs describe the new pull reasons and what its diagnosis touches
 
 Both READMEs said of `pull.sh` that "the diagnosis only reads", and that was true

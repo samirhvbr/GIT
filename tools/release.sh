@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# repodocs:tool — generated from samirhvbr/repodocs and regenerated in place.
+# A copy without this line is the repository's own and is never overwritten.
 # release.sh — every version in version.md gets a git tag named after it and a
 # published GitHub Release.
 #
@@ -32,7 +34,7 @@ DRY=0
 REPO=""
 SLEEP=0.35          # throttle: ~2.8 req/s, well under GitHub's ceiling
 RATE_FLOOR=200      # stop and report rather than exhausting the budget
-REF=""             # --ref: which history to walk (default: HEAD). Use
+REF=""             # --ref: which history to walk (default: origin's default branch). Use
                     # origin/master where the local checkout is behind and a
                     # pull is refused by in-flight work — backfilling from a
                     # stale HEAD silently omits every version pushed since.
@@ -67,17 +69,36 @@ first_semver() { grep -oE '[0-9]+\.[0-9]+\.[0-9]+' "$1" 2>/dev/null | head -n 1;
 # THE RULE: the version.md ON GITHUB is what the Releases ON GITHUB must match.
 # The local checkout does not enter the calculation — it can be behind, ahead or
 # mid-work, and none of that is published. So the authority is the remote branch
-# when we can see it, and HEAD only when we cannot (which is the CI case, where
-# HEAD *is* the pushed commit).
-if [ -z "$REF" ]; then
-  REF="$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null)"
-  [ -z "$REF" ] && REF="origin/$(git symbolic-ref --quiet --short HEAD 2>/dev/null)"
-  git rev-parse --verify --quiet "$REF" >/dev/null 2>&1 || REF="HEAD"
-fi
-git rev-parse --verify --quiet "$REF" >/dev/null || die "ref '$REF' does not exist"
+# after refreshing it. A missing tracking HEAD must never select unpublished
+# work from the local branch; ask origin which branch is its default.
+refresh_origin() {
+  local advertised default_ref tracking_ref
+  advertised="$(git ls-remote --symref origin HEAD)" || die "cannot resolve origin's default branch"
+  default_ref="$(printf '%s\n' "$advertised" | awk '$1 == "ref:" && $3 == "HEAD" { print $2 }')"
+  case "$default_ref" in
+    refs/heads/?*) ;;
+    *) die "origin's HEAD does not name a branch" ;;
+  esac
+  git check-ref-format "$default_ref" >/dev/null 2>&1 || die "origin's default branch is invalid"
+  tracking_ref="refs/remotes/origin/${default_ref#refs/heads/}"
+  # Keep other configured histories fresh for --ref, then fetch the default
+  # explicitly: remote.origin.fetch may exclude it and leave a stale ref behind.
+  git fetch --quiet origin || die "cannot refresh origin — nothing can be inferred from stale refs"
+  git fetch --quiet origin "+$default_ref:$tracking_ref" || die "cannot refresh origin's default branch"
+  git symbolic-ref refs/remotes/origin/HEAD "$tracking_ref" || die "cannot update origin's tracking HEAD"
+}
+refresh_origin
+DEFAULT_REF=refs/remotes/origin/HEAD
+DEFAULT_SHA="$(git rev-parse --verify "$DEFAULT_REF^{commit}")" || die "origin's default branch does not resolve"
+[ -n "$REF" ] || REF="$DEFAULT_REF"
+# Pin the commit before reading version.md. Another fetch can move a tracking
+# ref while release/list runs; the notes, version and target must stay together.
+TARGET_SHA="$(git rev-parse --verify "$REF^{commit}")" || die "ref '$REF' does not exist"
 
-CURRENT="$(git show "$REF:version.md" 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n 1)"
+CURRENT="$(git show "$TARGET_SHA:version.md" 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n 1)"
 [ -n "$CURRENT" ] || die "version.md at $REF holds no X.Y.Z anywhere"
+DEFAULT_VERSION="$(git show "$DEFAULT_SHA:version.md" 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n 1)"
+[ -n "$DEFAULT_VERSION" ] || die "version.md at origin's default branch holds no X.Y.Z anywhere"
 
 # Informational only: a local tree that disagrees is normal mid-work, and it is
 # deliberately NOT published.
@@ -87,6 +108,24 @@ if [ -n "$LOCAL_V" ] && [ "$LOCAL_V" != "$CURRENT" ]; then
     "$LOCAL_V" "$CURRENT" "$REF" >&2
 fi
 
+# `origin`, explicitly, and only then gh's own guess. `gh repo view` with no
+# argument resolves the repository from *all* the remotes by its own
+# precedence: in a fork carrying an `upstream` remote it answers the upstream,
+# and this script then tries to publish a Release into somebody else's
+# repository. Measured in `000/hermes-agent` on 07/09/2026 — it asked
+# NousResearch and got a 404. The 404 is luck. Where we hold write access to
+# the second remote, it would have published to the wrong place and nothing
+# would have said so.
+if [ -z "$REPO" ]; then
+  ORIGIN_URL="$(git remote get-url origin 2>/dev/null || true)"
+  if [ -n "$ORIGIN_URL" ]; then
+    CANDIDATE="$(printf '%s' "$ORIGIN_URL" | sed -E 's#^(git@|https://|ssh://git@)##; s#^github\.com[:/]##; s#\.git$##; s#/$##')"
+    case "$CANDIDATE" in
+      */*/*|"") ;;                 # not owner/name — leave it to gh
+      */*) REPO="$CANDIDATE" ;;
+    esac
+  fi
+fi
 if [ -z "$REPO" ]; then
   REPO="$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null)"
 fi
@@ -95,17 +134,18 @@ fi
 BRANCH="$(git symbolic-ref --quiet --short HEAD 2>/dev/null || echo master)"
 
 # --- release notes ------------------------------------------------------------
-# Preference: the CHANGELOG section for this version → the commit subjects that
-# carried it → GitHub's own generated notes. EOP has no CHANGELOG.md at all, so
-# the fallback is not theoretical.
+# Preference: all CHANGELOG sections for this exact version at the release's
+# target commit → the commit subjects that carried it → GitHub's own generated
+# notes. The working tree may contain another version or unpublished edits.
+# EOP has no CHANGELOG.md at all, so the fallback is not theoretical.
 #
 # Two heading shapes exist in this fleet, and both are matched:
 #   ## 1.1.0 - título
 #   ### `0.17.0` — 2026-08-24 — título
 notes_for() {
-  local ver="$1" sha="$2" out="$3" body=""
-  if [ -f CHANGELOG.md ]; then
-    body="$(awk -v ver="$ver" '
+  local ver="$1" sha="$2" out="$3" body="" changelog=""
+  if changelog="$(git show "$sha:CHANGELOG.md" 2>/dev/null)"; then
+    body="$(printf '%s\n' "$changelog" | awk -v ver="$ver" '
       # Returns the heading level (2..4), or 0 for a non-heading line.
       function hlevel(line,   m) {
         if (match(line, /^#{2,4}[ \t]/)) { m = substr(line, 1, RLENGTH); gsub(/[ \t]/, "", m); return length(m) }
@@ -115,26 +155,40 @@ notes_for() {
       # fleet writes both `## 1.1.0 - x` and "### `0.17.0` - 2026-08-24 - x".
       function is_ours(line,   s) {
         s = line; sub(/^#+[ \t]*/, "", s); gsub(/`/, "", s)
-        return index(s, ver) == 1
+        return s == ver || index(s, ver " ") == 1 || index(s, ver "\t") == 1
       }
       { lv = hlevel($0)
-        if (!flag) { if (lv && is_ours($0)) { flag = 1; open_lv = lv } ; next }
         # Only a heading at the SAME level or higher ends the section — the
         # entry keeps its own ### subsections, which is where the substance is.
-        if (lv && lv <= open_lv) exit
+        if (flag && lv && lv <= open_lv) flag = 0
+        # Several commits may share a version; keep every matching section,
+        # including those after a different version, in changelog order.
+        if (!flag) {
+          if (lv && is_ours($0)) {
+            if (found++) print ""
+            flag = 1; open_lv = lv
+          }
+          next
+        }
         print }
-    ' CHANGELOG.md)"
+    ')"
   fi
   if [ -z "$(printf '%s' "$body" | tr -d '[:space:]')" ]; then
     body="$(git log --format='- %s' --grep="^$(printf '%s' "$ver" | sed 's/\./\\./g') - " "$sha" 2>/dev/null | head -n 40)"
-    [ -n "$body" ] && body="## Commits$(printf '\n\n')$body"
+    [ -n "$body" ] && body="## Commits"$'\n\n'"$body"
   fi
   printf '%s\n' "$body" > "$out"
   [ -s "$out" ] && [ -n "$(tr -d '[:space:]' < "$out")" ]
 }
 
 # --- rate limit ---------------------------------------------------------------
-rate_left() { gh api rate_limit --jq '.resources.core.remaining' 2>/dev/null || echo 9999; }
+rate_left() {
+  local left
+  left="$(gh api rate_limit --jq '.resources.core.remaining' 2>/dev/null)" || return 1
+  case "$left" in ''|*[!0-9]*) return 1 ;; esac
+  [ "${#left}" -le 9 ] || return 1
+  printf '%s\n' "$left"
+}
 
 # --- what is already published ------------------------------------------------
 # Fetched ONCE per repo, not once per version. Asking `gh release view` for each
@@ -142,7 +196,8 @@ rate_left() { gh api rate_limit --jq '.resources.core.remaining' 2>/dev/null || 
 # fleet-wide before creating anything.
 EXISTING="$(mktemp)"
 trap 'rm -f "$EXISTING"' EXIT
-gh release list --repo "$REPO" --limit 1000 --json tagName --jq '.[].tagName' > "$EXISTING" 2>/dev/null || : > "$EXISTING"
+gh release list --repo "$REPO" --limit 1000 --json tagName --jq '.[].tagName' > "$EXISTING" 2>/dev/null \
+  || die "cannot list published releases — an unknown list is not an empty one"
 EXISTING_N="$(grep -c . "$EXISTING" || true)"
 # A version counts as published under EITHER name. Some repos in this fleet
 # published Releases with a `v` prefix before the bare-number rule existed, and
@@ -165,16 +220,25 @@ publish() {
     CREATED=$((CREATED+1)); return 0
   fi
 
-  local left; left="$(rate_left)"
-  if [ "$left" -lt "$RATE_FLOOR" ] 2>/dev/null; then
+  local left
+  if ! left="$(rate_left)"; then
+    printf 'release.sh: STOPPING — cannot determine the remaining API budget. Re-run later.\n' >&2
+    FAILED=$((FAILED+1)); return 9
+  fi
+  if [ "$left" -lt "$RATE_FLOOR" ]; then
     printf 'release.sh: STOPPING — only %s API calls left. Re-run later; it resumes.\n' "$left" >&2
-    return 9
+    FAILED=$((FAILED+1)); return 9
   fi
 
   local nf; nf="$(mktemp)"
   local args=(release create "$ver" --repo "$REPO" --target "$sha" --title "$ver")
   if notes_for "$ver" "$sha" "$nf"; then args+=(--notes-file "$nf"); else args+=(--generate-notes); fi
-  [ "$is_last" = "1" ] && args+=(--latest)
+  # `--latest` belongs to the version that version.md names, NOT to the last one
+  # this run happens to touch. Measured the hard way: a backfill that started
+  # while version.md said 1.2.80 stamped `--latest` on 1.2.80 minutes after a
+  # push had moved the file to 1.2.81 — the Release for 1.2.81 existed, and the
+  # badge sat on the older one.
+  if [ "$ver" = "$DEFAULT_VERSION" ]; then args+=(--latest); else args+=(--latest=false); fi
 
   # Creating a release is a "content-creating" request, which GitHub throttles
   # far more tightly than reads — a secondary limit that answers 403 with a
@@ -203,6 +267,7 @@ publish() {
     # Three failures in a row is a wall, not a fluke — stop and let the operator
     # look, instead of burning the remaining budget against it.
     CONSEC_FAIL=$((CONSEC_FAIL+1))
+    rm -f "$nf" "$nf.err"
     [ "$CONSEC_FAIL" -ge 3 ] && { printf 'release.sh: STOPPING after 3 consecutive failures.\n' >&2; return 9; }
     return 0
   fi
@@ -218,13 +283,13 @@ if [ "$MODE" = "current" ]; then
   # Tag the commit the version actually lives on, on the remote. Uncommitted or
   # unpushed bumps are not published — GitHub cannot tag a commit it does not
   # have, and a Release for a version nobody can fetch is a lie.
-  publish "$CURRENT" "$(git rev-parse "$REF")" 1
+  publish "$CURRENT" "$TARGET_SHA" 1
 else
   # Oldest first, so the newest version is created last and ends up "Latest".
   # For each distinct version, the tag points at the LAST commit that carried
   # it — the finished state of that version, not its first commit. Several
   # commits sharing one version is expected and allowed (ADR-003).
-  MAP="$(git log --reverse --format='%H%x09%s' "$REF" | awk -F'\t' '
+  MAP="$(git log --reverse --format='%H%x09%s' "$TARGET_SHA" | awk -F'\t' '
     { if (match($2, /^[0-9]+\.[0-9]+\.[0-9]+/)) {
         v = substr($2, RSTART, RLENGTH)
         if (!(v in seen)) { order[++n] = v; seen[v] = 1 }
@@ -240,10 +305,52 @@ else
   done <<< "$MAP"
 fi
 
+# Reconcile the badge against the remote AS IT IS NOW, not as it was when this
+# run started. A push can land mid-run — that is not an edge case here, it is
+# what happened. If the new version has no release yet, report an incomplete
+# run; do not silently publish a version outside the selected history.
+reconcile_latest() {
+  [ "$DRY" = "1" ] && return 0
+  refresh_origin
+  local now
+  now="$(git show "$DEFAULT_REF:version.md" 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n 1)"
+  [ -n "$now" ] || { printf 'release.sh: cannot read the current remote version for Latest.\n' >&2; return 1; }
+  local badge
+  if ! badge="$(gh release view --repo "$REPO" --json tagName -q .tagName 2>/dev/null)" || [ -z "$badge" ]; then
+    printf 'release.sh: cannot read the Latest release.\n' >&2; return 1
+  fi
+  { [ "$badge" = "$now" ] || [ "$badge" = "v$now" ]; } && return 0
+  local tag="$now"
+  if ! grep -Fxq "$now" "$EXISTING" && grep -Fxq "v$now" "$EXISTING"; then tag="v$now"; fi
+  if ! gh release view "$tag" --repo "$REPO" >/dev/null 2>&1; then
+    printf 'release.sh: cannot confirm a release for remote version %s; re-run after it is published.\n' "$now" >&2
+    return 1
+  fi
+  if ! gh release edit "$tag" --repo "$REPO" --latest >/dev/null 2>&1; then
+    printf 'release.sh: cannot move Latest to %s.\n' "$tag" >&2; return 1
+  fi
+  local observed
+  if ! observed="$(gh release view --repo "$REPO" --json tagName -q .tagName 2>/dev/null)"; then
+    printf 'release.sh: cannot verify Latest after editing %s.\n' "$tag" >&2; return 1
+  fi
+  if [ "$observed" != "$tag" ]; then
+    printf 'release.sh: Latest did not confirm %s after the edit.\n' "$tag" >&2; return 1
+  fi
+  printf 'release.sh: Latest moved from %s to %s (the remote version is the authority).\n' "$badge" "$tag" >&2
+}
+if [ "$FAILED" -eq 0 ]; then
+  reconcile_latest || FAILED=$((FAILED+1))
+fi
+if [ "$DRY" != 1 ] && [ "$FAILED" -eq 0 ]; then
+  if ! git fetch --tags --quiet origin 2>/dev/null; then
+    printf 'release.sh: cannot refresh local tags after publication.\n' >&2
+    FAILED=$((FAILED+1))
+  fi
+fi
+
 if [ "$QUIET" = "1" ]; then
-  printf '%-34s %-12s versions=%-5s todo=%-5s have=%s\n' "$REPO" "$CURRENT" "$((CREATED+SKIPPED))" "$CREATED" "$SKIPPED"
+  printf '%-34s %-12s versions=%-5s todo=%-5s have=%s failed=%s\n' "$REPO" "$CURRENT" "$((CREATED+SKIPPED))" "$CREATED" "$SKIPPED" "$FAILED"
 else
   printf '\ncreated/would-create: %s   skipped: %s   failed: %s\n' "$CREATED" "$SKIPPED" "$FAILED"
 fi
-[ "$DRY" = 1 ] || git fetch --tags --quiet 2>/dev/null || true
 [ "$FAILED" -eq 0 ]
