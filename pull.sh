@@ -194,15 +194,32 @@ default_branch() {
     return 0
 }
 
+# True when every non-merge commit of HEAD that $1 lacks has a patch-equivalent in
+# $1, and there is at least one: a rebase merge or a cherry-pick keeps the patches
+# and loses the hashes, and keeps them whatever the branch did afterwards, which a
+# tree comparison does not. `git cherry` does not judge merge commits, so output
+# with nothing in it (a branch of merges only) proves nothing and answers no.
+patches_in() {
+    local out
+    out=$(git cherry "$1" HEAD 2>/dev/null) || return 1
+    [ -n "$out" ] || return 1
+    ! grep -q '^+' <<<"$out"
+}
+
 # Is the work of HEAD already in $1, a remote-tracking ref? It is when HEAD is an
-# ancestor of it, or when merging HEAD into it would not change its tree, which
-# is what a squash or rebase merge leaves behind. Read-only.
+# ancestor of it; or when merging HEAD into it would not change its tree, which
+# is what a squash merge leaves behind the day after; or when every commit of HEAD
+# has its patch there (patches_in), which is what a rebase merge leaves behind
+# and keeps leaving as the branch moves on. Read-only.
 landed_in() {
     local ref="$1" ahead tree
     ahead=$(git rev-list --count HEAD --not "$ref" 2>/dev/null) || return 1
     [ "$ahead" -eq 0 ] && return 0
-    tree=$(git merge-tree --write-tree "$ref" HEAD 2>/dev/null) || return 1
-    [ "$tree" = "$(git rev-parse "$ref^{tree}")" ]
+    if tree=$(git merge-tree --write-tree "$ref" HEAD 2>/dev/null) \
+       && [ "$tree" = "$(git rev-parse "$ref^{tree}")" ]; then
+        return 0
+    fi
+    patches_in "$ref"
 }
 
 # Looks for the work of HEAD in the default branch of the tracking remote ($2)
@@ -322,6 +339,41 @@ diagnose_deleted_branch() {
     return 0
 }
 
+# A branch with no upstream has nothing to pull, and "sem upstream" used to stand
+# for three situations whose repairs have nothing in common. The branch exists on
+# a remote under its own name: the repair is `git branch --set-upstream-to`. The
+# branch was never published and its work is already in some remote's default
+# branch: the repair is to leave it, as with a deleted one. Or the branch was
+# never published and the work is nowhere else, which is not a pull failure at
+# all but the one thing the list should keep in sight.
+#
+# The same-name lookup reads local refs only. The pull that failed did not fetch
+# (git refuses before it gets that far), so those refs may be old, and a hint to
+# set an upstream is cheap to be wrong about; the landing check does fetch, in
+# find_landing, because a claim that the work is safe must not rest on old refs.
+# Sets `motivo`, `detalhe`, `dica`, `alvo`.
+diagnose_no_upstream() {
+    local branch="$1" rem first
+    motivo="sem upstream"; detalhe=""; dica=""; alvo=""
+    for rem in $(git remote 2>/dev/null); do
+        if git rev-parse --verify --quiet "refs/remotes/$rem/$branch" >/dev/null; then
+            detalhe="existe $rem/$branch"
+            dica="git branch --set-upstream-to=$rem/$branch"
+            return 0
+        fi
+    done
+    first=$(git remote 2>/dev/null | grep -xF origin || git remote 2>/dev/null | head -n 1)
+    if find_landing "$branch" "$first" ""; then
+        mark_landed "$lrem" "$ldef" "sem upstream, já na principal" "sem upstream"
+    else
+        motivo="sem upstream, só local"
+        if [ -n "$pahead" ] && [ -n "$pdef" ]; then
+            detalhe="branch nunca publicada: $pahead commit(s) fora de $prem/$pdef"
+        fi
+    fi
+    return 0
+}
+
 ok=(); fail=(); fail_reason=(); fail_alvo=(); skipped=(); parados=()
 
 for repo in "${REPOS[@]}"; do
@@ -370,6 +422,8 @@ for repo in "${REPOS[@]}"; do
         motivo=$(classify_fail "$out"); detalhe=""; dica=""; alvo=""
         if [ "$motivo" = "branch apagada no remoto" ]; then
             diagnose_deleted_branch "$branch"
+        elif [ "$motivo" = "sem upstream" ]; then
+            diagnose_no_upstream "$branch"
         fi
         echo -e "   ${RED}✗ $motivo${detalhe:+ — $detalhe}${NC}"
         if [ -n "$dica" ]; then echo -e "   ${GREEN}→ $dica${NC}"; fi
@@ -383,7 +437,8 @@ if [ ${#fail[@]} -gt 0 ]; then
     echo -e "${RED}  ✗ Falhou: ${fail[*]}${NC}"
     # Grouped by reason: the flat list answers "which", and what is actually
     # wanted is "which repair", which is not the same for the repos on it.
-    for motivo in "sem upstream" "branch apagada, já na principal" \
+    for motivo in "sem upstream" "sem upstream, já na principal" \
+                  "sem upstream, só local" "branch apagada, já na principal" \
                   "branch apagada, árvore suja" \
                   "branch apagada no remoto" "divergiu do remoto" \
                   "árvore suja" "conflito" "remoto inacessível" \

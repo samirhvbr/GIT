@@ -83,6 +83,8 @@ rem One list per failure reason, filled by :addmot. Same set of reasons as the
 rem .sh, minus "diretorio nao encontrado": this side only calls :pull on a
 rem directory it has already seen holding a .git.
 set "MOT_UPSTREAM="
+set "MOT_UPSPRINC="
+set "MOT_UPLOCAL="
 set "MOT_MERGEADA="
 set "MOT_APAGSUJA="
 set "MOT_APAGADA="
@@ -171,6 +173,8 @@ if defined FAILLIST (
     rem Agrupado por motivo: a lista corrida responde "quais", e o que se quer
     rem saber e "qual conserto", que nao e o mesmo para os repos dela.
     if defined MOT_UPSTREAM echo       sem upstream:!MOT_UPSTREAM!
+    if defined MOT_UPSPRINC echo       sem upstream, ja na principal:!MOT_UPSPRINC!
+    if defined MOT_UPLOCAL  echo       sem upstream, so local:!MOT_UPLOCAL!
     if defined MOT_MERGEADA echo       branch apagada, ja na principal:!MOT_MERGEADA!
     if defined MOT_APAGSUJA echo       branch apagada, arvore suja:!MOT_APAGSUJA!
     if defined MOT_APAGADA  echo       branch apagada no remoto:!MOT_APAGADA!
@@ -233,6 +237,7 @@ if "!RC!"=="0" (
     set "DICA="
     set "ALVO="
     if "!MOTKEY!"=="APAGADA" call :apagada "!branch!"
+    if "!MOTKEY!"=="UPSTREAM" call :semup "!branch!"
     set "LINHA=x !MOTIVO!"
     if defined DETALHE set "LINHA=!LINHA! - !DETALHE!"
     echo    !LINHA!
@@ -373,11 +378,14 @@ if not defined _n exit /b 1
 if "%~4"=="1" set "PAHEAD=%_n%"
 if "%_n%"=="0" goto pouso_sim
 git merge-tree --write-tree "%~2/%DEFB%" HEAD > "%TMPOUT%" 2>nul
-if errorlevel 1 exit /b 1
+if errorlevel 1 goto pouso_patches
 set "_t="
 set /p _t=<"%TMPOUT%"
-if not defined _t exit /b 1
-git diff --quiet %_t% "%~2/%DEFB%" 2>nul || exit /b 1
+if not defined _t goto pouso_patches
+git diff --quiet %_t% "%~2/%DEFB%" 2>nul && goto pouso_sim
+:pouso_patches
+call :patches_em "%~2/%DEFB%"
+if errorlevel 1 exit /b 1
 :pouso_sim
 set "LREM=%~2"
 set "LDEF=%DEFB%"
@@ -452,6 +460,52 @@ set "MOTIVO=%~4"
 set "MOTKEY=%~6"
 set "DETALHE=o trabalho ja esta em %~1/%~2, mas ha alteracoes nao commitadas em %_sujo% arquivo(s) rastreado(s)"
 set "DICA=git status --short - guarde ou commite as alteracoes antes de trocar para %~2"
+exit /b 0
+
+rem patches_in of pull.sh. errorlevel 0 when every non-merge commit of HEAD that
+rem the ref in the first argument lacks has a patch-equivalent in it, and there is
+rem at least one: a rebase merge or a cherry-pick keeps the patches and loses the
+rem hashes, and keeps them whatever the branch did afterwards, which a tree
+rem comparison does not. git cherry does not judge merge commits, so empty output
+rem proves nothing and answers no.
+:patches_em
+git cherry "%~1" HEAD > "%TMPOUT%" 2>nul
+if errorlevel 1 exit /b 1
+for %%f in ("%TMPOUT%") do if %%~zf==0 exit /b 1
+findstr /b /c:"+" "%TMPOUT%" >nul 2>&1
+if not errorlevel 1 exit /b 1
+exit /b 0
+
+rem Same diagnosis as diagnose_no_upstream in pull.sh. A branch with no upstream
+rem has nothing to pull, and the plain reason stood for three situations with
+rem nothing in common in their repairs. The branch exists on a remote under its
+rem own name: set the upstream. The branch was never published and its work is
+rem already in some remote's default branch: leave it. Or it was never published
+rem and the work is nowhere else, which is not a pull failure but the one thing
+rem the list should keep in sight. The same-name lookup reads local refs only;
+rem the landing check fetches, because a claim that the work is safe must not
+rem rest on old refs. Sets MOTIVO, MOTKEY, DETALHE, DICA and ALVO.
+:semup
+for /f "delims=" %%r in ('git remote 2^>nul') do (
+    git rev-parse --verify --quiet "refs/remotes/%%r/%~1" >nul 2>&1
+    if not errorlevel 1 (
+        set "DETALHE=existe %%r/%~1"
+        set "DICA=git branch --set-upstream-to=%%r/%~1"
+        exit /b 0
+    )
+)
+set "_first="
+for /f "delims=" %%r in ('git remote 2^>nul') do if not defined _first set "_first=%%r"
+git remote 2>nul | findstr /x /c:"origin" >nul 2>&1
+if not errorlevel 1 set "_first=origin"
+call :acha_pouso "%~1" "!_first!" ""
+if not errorlevel 1 (
+    call :marca_pouso "!LREM!" "!LDEF!" "sem upstream, ja na principal" "sem upstream" UPSPRINC UPSTREAM
+    exit /b 0
+)
+set "MOTIVO=sem upstream, so local"
+set "MOTKEY=UPLOCAL"
+if defined PAHEAD if defined PDEF set "DETALHE=branch nunca publicada: %PAHEAD% commit(s) fora de %PREM%/%PDEF%"
 exit /b 0
 
 rem Acumula o repo na lista do motivo. O nome da variavel e montado:

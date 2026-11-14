@@ -13,6 +13,66 @@ never rewritten.
 > reconstructing them now would produce a plausible history rather than a true
 > one.
 
+## 1.9.7 - pull tells a branch with no upstream apart: set it, already landed, or never published
+
+`git pull` on a branch with no upstream fails the same way whatever the reason,
+and `classify_fail` filed all of them under `sem upstream`. In the 14/11/2026
+sweep that label held seven repositories with four different stories. The repair
+git prints (`git branch --set-upstream-to=...`) could not work for any of them:
+`git ls-remote` found no branch of that name on any remote of the seven.
+
+- `0forks/YouPI-PG` and `0forks/ai-jail` were on local branches whose commits are
+  already in `upstream/main` and `upstream/master`: nothing to publish, and the
+  clone is simply on a branch it no longer needs.
+- `000/shvia-mobile-pr-fixes-20261105` was on `recut/docs-review-0.7.15`, whose
+  nine commits had reached `origin/master` by rebase: `git cherry` says `+0 -9`,
+  nine patches there and none missing, while `HEAD` is neither an ancestor nor
+  tree-equal to it, and `origin/master` had moved fifteen commits on.
+- `000/b3dev-projects-back-contrib-20261022`, `000/bemcuidar-v2-contrib-20261022`
+  and `000/mmo-project-contrib-20261022` were on integration branches that were
+  never pushed, with five commits each that no remote has. That is unpublished
+  work, and a person should see it as that.
+- `000/recon-deck-review2-evidence-20261022` has no remote at all, which the
+  previous commit already sets apart.
+
+`diagnose_no_upstream` splits them. If a remote has the branch under its own name
+(local refs only), the reason stays `sem upstream` and the hint is the
+`--set-upstream-to` that now fits. Otherwise `find_landing` looks for the work in
+every remote's default branch, fetching that one branch from each remote first:
+the pull that failed fetched nothing, so a claim that the work is safe must not
+rest on refs of unknown age. Found, and the working tree clean, it is
+`sem upstream, já na principal` with `git switch <default> && git pull --ff-only`;
+found with modified tracked files, it stays `sem upstream` with the count of files
+and no switch command, as `branch apagada, árvore suja` does. Not found, it is
+`sem upstream, só local`, with `branch nunca publicada: N commit(s) fora de
+<remote>/<default>`. The three are three lines of the summary.
+
+`landed_in` learns a third way to say yes, `patches_in`: every non-merge commit of
+`HEAD` that the ref lacks has a patch-equivalent in it, and there is at least one.
+It is what a rebase merge or a cherry-pick leaves behind, and it keeps holding as
+the branch moves on, which the tree comparison does not. `git cherry` does not
+judge merge commits, so a branch of merges only gives empty output, and empty
+output answers no. The deleted-branch diagnosis of the previous commit gets it
+too.
+
+Replayed against copies of those seven clones, the 1.9.6 `pull.sh` reported seven
+`sem upstream`; this one reports `YouPI-PG`, `ai-jail` and `shvia-mobile-pr-fixes`
+as `já na principal`, the three integration branches as `só local`, and the
+repository with no remote is the previous commit's `sem remote`. None of the
+seven has a same-name branch on a remote, so that path is only exercised by the
+test.
+
+`tests/pull_no_upstream_test.sh` builds each story: a branch pushed under its own
+name with no upstream, one never published and already in `origin/main`, the same
+with a modified file, one landed in an upstream the clone had not fetched since
+setup, one cherry-picked into a `main` that has since edited the same file (so the
+tree comparison conflicts and only the patches tell), the same with one extra
+commit that never reached `main` (not landed), and one with two commits nobody
+has. It checks that the switch is offered to exactly the three clean landed
+clones and that no clone changed branch or lost its modified file. It fails on
+the previous commit's `pull.sh`. `pull.cmd` carries the same in `:semup` and
+`:patches_em`; it was not executed: no cmd interpreter on this machine.
+
 ## 1.9.7 - pull finds a deleted branch whose work landed in any remote or by pull request
 
 Eight clones in the 14/11/2026 sweep were filed under `branch apagada no remoto`
