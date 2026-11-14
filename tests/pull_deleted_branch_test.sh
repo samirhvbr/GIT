@@ -135,6 +135,19 @@ commit "$forge" s "later edit of s"
 git -C "$forge" push -q origin main
 git -C "$forge" push -q origin --delete feat
 
+# A second remote configured as a mirror (`+refs/*:refs/*`) and a local main with
+# a commit nobody else has. The diagnosis fetches that remote's default branch; it
+# must write only refs/remotes/, never the local main.
+new_repo mirrorbk main 1
+git -C "$BASE/GRP/mirrorbk" switch -q main
+commit "$BASE/GRP/mirrorbk" file "local-only work on main"
+git -C "$BASE/GRP/mirrorbk" switch -q feat
+git clone -q --bare "$WORK/remotes/mirrorbk.git" "$WORK/remotes/mirrorbk-bk.git"
+git -C "$BASE/GRP/mirrorbk" remote add bk "$WORK/remotes/mirrorbk-bk.git"
+git -C "$BASE/GRP/mirrorbk" config remote.bk.fetch '+refs/*:refs/*'
+git -C "$WORK/remotes/mirrorbk.git" branch -D feat >/dev/null
+mirror_main_before="$(git -C "$BASE/GRP/mirrorbk" rev-parse main)"
+
 # Landed like `merged`, but the working tree is not clean. Modified tracked
 # files (staged or not) make the switch unsafe; an untracked file does not.
 new_repo staged main 1;    forge staged main merge
@@ -163,7 +176,7 @@ expect "branch apagada, já na principal: GRP/contrib→main GRP/merged→main G
 expect "branch apagada, árvore suja: GRP/staged GRP/unstaged"
 expect "✗ branch apagada, já na principal — o trabalho já está em upstream/main"
 expect "✗ branch apagada no remoto — 2 commit(s) fora de origin/main; confira antes de trocar de branch"
-expect "branch apagada no remoto: GRP/contribopen GRP/mergecontent GRP/prextra GRP/unmerged"
+expect "branch apagada no remoto: GRP/contribopen GRP/mergecontent GRP/mirrorbk GRP/prextra GRP/unmerged"
 expect "o trabalho já está em upstream/main — PR #7 mesclado com este mesmo commit"
 expect "✗ branch apagada, árvore suja — o trabalho já está em origin/main, mas há alterações não commitadas em 1 arquivo(s) rastreado(s)"
 expect "→ git status --short — guarde ou commite as alterações antes de trocar para main"
@@ -173,8 +186,12 @@ expect "→ git status --short — guarde ou commite as alterações antes de tr
 switches="$(grep -cF -- '→ git switch main && git pull --ff-only' <<<"$out")"
 [[ "$switches" == 4 ]] || { printf 'switch offered %s times, expected 4\n\n%s\n' "$switches" "$out" >&2; exit 1; }
 
+# The mirror remote's fetch went to refs/remotes/bk/ only: the local main kept its commit.
+[[ "$(git -C "$BASE/GRP/mirrorbk" rev-parse main)" == "$mirror_main_before" ]] \
+    || { printf 'mirrorbk: the diagnosis moved the local main\n' >&2; exit 1; }
+
 # The diagnosis only reads: every clone is still on the branch it was on.
-for name in contrib contribopen prmerged prextra mergecontent merged squashed unmerged staged unstaged untracked; do
+for name in contrib contribopen prmerged prextra mergecontent mirrorbk merged squashed unmerged staged unstaged untracked; do
     [[ "$(git -C "$BASE/GRP/$name" branch --show-current)" == feat ]] \
         || { printf '%s left branch feat\n' "$name" >&2; exit 1; }
 done

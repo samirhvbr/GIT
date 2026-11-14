@@ -176,6 +176,19 @@ classify_fail() {
     esac
 }
 
+# Every network call the diagnosis adds runs without a prompt. Those calls reach
+# remotes the sweep's own `git pull` never touched — a fork deleted on GitHub that
+# answers HTTPS with a credential prompt, an SSH host that asks about its key or
+# never answers — and a sweep that waits on a terminal nobody is watching never
+# ends. A `core.sshCommand` or `GIT_SSH_COMMAND` the person set is left alone.
+diag_net() {
+    if [ -z "${GIT_SSH_COMMAND:-}" ] && [ -z "$(git config --get core.sshCommand 2>/dev/null)" ]; then
+        GIT_TERMINAL_PROMPT=0 GIT_SSH_COMMAND='ssh -o BatchMode=yes -o ConnectTimeout=10' "$@"
+    else
+        GIT_TERMINAL_PROMPT=0 "$@"
+    fi
+}
+
 # The remote's default branch, from the local origin/HEAD, then from the
 # remote itself, then by the two names in use. Empty when none of them answers.
 default_branch() {
@@ -183,7 +196,7 @@ default_branch() {
     if ref=$(git symbolic-ref --quiet --short "refs/remotes/$remote/HEAD" 2>/dev/null); then
         echo "${ref#"$remote"/}"; return 0
     fi
-    ref=$(git ls-remote --symref "$remote" HEAD 2>/dev/null \
+    ref=$(diag_net git ls-remote --symref "$remote" HEAD 2>/dev/null \
           | awk '$1 == "ref:" { sub("^refs/heads/", "", $2); print $2; exit }')
     if [ -n "$ref" ]; then echo "$ref"; return 0; fi
     for ref in main master; do
@@ -273,7 +286,11 @@ find_landing() {
         [ "$rem" = "$first" ] && pdef="$def"
         [ -n "$def" ] && [ "$def" != "$branch" ] || continue
         if [ "$rem" != "$fresh" ]; then
-            GIT_TERMINAL_PROMPT=0 git fetch --quiet --no-tags "$rem" "$def" >/dev/null 2>&1 || true
+            # Explicit destination AND an empty --refmap: without the latter git also
+            # applies the remote's configured refspec, and a mirror-style one
+            # (+refs/*:refs/*) would force-move the local branch of the same name.
+            diag_net git fetch --quiet --no-tags --refmap= "$rem" \
+                "+refs/heads/$def:refs/remotes/$rem/$def" >/dev/null 2>&1 || true
         fi
         git rev-parse --verify --quiet "refs/remotes/$rem/$def" >/dev/null || continue
         if [ "$rem" = "$first" ]; then

@@ -13,6 +13,34 @@ never rewritten.
 > reconstructing them now would produce a plausible history rather than a true
 > one.
 
+## 1.9.8 - pull's diagnosis fetches into remote-tracking refs only and never waits on a prompt
+
+To tell whether a branch's work landed, 1.9.7 fetches each remote's default
+branch with `git fetch <remote> <branch>`. With no destination, git maps the ref
+through the remote's own configured refspec, and with a mirror-style one
+(`+refs/*:refs/*`) it force-moves the **local** branch of the same name. The review
+reproduced it: a local `main` with a commit nobody else had was reset to the
+mirror's, and the commit survived only in the reflog — while the README said the
+diagnosis never moves a branch.
+
+The fetch now names its destination, `+refs/heads/<branch>:refs/remotes/<remote>/<branch>`,
+and passes an empty `--refmap=`: an explicit destination alone is not enough,
+because git still applies the configured refspec as an "opportunistic" update of
+the refs it fetched.
+
+The same calls reached remotes the sweep's own `git pull` never touches, with
+nothing to stop a prompt: `git ls-remote` had no `GIT_TERMINAL_PROMPT=0`, and
+neither had an SSH remote asking about a host key or a host that never answers.
+`diag_net` now runs every network call of the diagnosis with the terminal prompt
+off and, unless the person set `core.sshCommand` or `GIT_SSH_COMMAND`, SSH in
+`BatchMode` with a 10-second connect timeout. `pull.cmd` turns off the git prompt
+and Git Credential Manager's (`GCM_INTERACTIVE=never`) while it diagnoses a
+repository, and gives the person's values back afterwards.
+
+`tests/pull_deleted_branch_test.sh` adds `mirrorbk`, whose local `main` the
+previous commit's `pull.sh` moved; it stays put now. `pull.cmd` was not executed:
+no cmd interpreter on this machine.
+
 ## 1.9.8 - pull calls work landed by patches only when no merge or revert can hide a loss
 
 The 14/11/2026 review reproduced two ways 1.9.7 could talk someone out of their

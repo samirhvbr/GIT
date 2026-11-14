@@ -97,6 +97,11 @@ set "MOT_OUTRO="
 
 rem git's output goes to a file so that :classify can read it back.
 set "TMPOUT=%TEMP%\pull_%RANDOM%%RANDOM%.txt"
+rem The diagnosis reaches remotes the pull never touched, so it runs with the
+rem prompts off: GIT_TERMINAL_PROMPT for git, GCM_INTERACTIVE for Git Credential
+rem Manager. The values the person had come back after each repository.
+set "ORIG_GTP=%GIT_TERMINAL_PROMPT%"
+set "ORIG_GCM=%GCM_INTERACTIVE%"
 
 rem -- descoberta: BASE\repo e BASE\grupo\repo (mesma do .sh) ---------------
 rem A .git directory without a HEAD is not a repository: SHVIA\.git was exactly
@@ -238,9 +243,13 @@ if "!RC!"=="0" (
     set "DETALHE="
     set "DICA="
     set "ALVO="
+    set "GIT_TERMINAL_PROMPT=0"
+    set "GCM_INTERACTIVE=never"
     if "!MOTKEY!"=="APAGADA" call :apagada "!branch!"
     if "!MOTKEY!"=="UPSTREAM" call :semup "!branch!"
     if "!MOTKEY!"=="DIVERGIU" call :diverge "!branch!"
+    set "GIT_TERMINAL_PROMPT=!ORIG_GTP!"
+    set "GCM_INTERACTIVE=!ORIG_GCM!"
     set "LINHA=x !MOTIVO!"
     if defined DETALHE set "LINHA=!LINHA! - !DETALHE!"
     echo    !LINHA!
@@ -373,7 +382,9 @@ call :def_remoto "%~2"
 if "%~4"=="1" set "PDEF=%DEFB%"
 if not defined DEFB exit /b 1
 if /i "%DEFB%"=="%~1" exit /b 1
-if /i not "%~2"=="%~3" git fetch --quiet --no-tags "%~2" "%DEFB%" >nul 2>&1
+rem Explicit destination and an empty --refmap, as in pull.sh: a mirror refspec
+rem configured on the remote must never move a local branch.
+if /i not "%~2"=="%~3" git fetch --quiet --no-tags --refmap= "%~2" "+refs/heads/%DEFB%:refs/remotes/%~2/%DEFB%" >nul 2>&1
 git rev-parse --verify --quiet "refs/remotes/%~2/%DEFB%" >nul 2>&1 || exit /b 1
 set "_n="
 for /f %%n in ('git rev-list --count HEAD --not "%~2/%DEFB%" 2^>nul') do set "_n=%%n"
