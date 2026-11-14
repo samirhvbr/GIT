@@ -13,6 +13,22 @@ never rewritten.
 > reconstructing them now would produce a plausible history rather than a true
 > one.
 
+## 1.9.7 - the READMEs describe the new pull reasons and what its diagnosis touches
+
+Both READMEs said of `pull.sh` that "the diagnosis only reads", and that was true
+of 1.9.6 and stopped being true in the second commit of this version: to say that
+a deleted or unpublished branch's work has landed, the script fetches the default
+branch of each remote it did not just pull from, and for a deleted branch it asks
+`gh` for merged pull requests. The sentence now says exactly what the diagnosis
+touches: it never moves a branch, the index or the working tree, it updates
+remote-tracking refs for one branch per remote (never a prune), and it asks `gh`.
+
+The same row lists what a summary can now say: `Sem o que puxar` for a repository
+with no remote or a detached HEAD, the three kinds of `sem upstream`, `já na
+principal` and the commit count for a deleted branch, `já no remoto` and the counts
+for a diverged one, and where "already landed" is looked for and by which test.
+`README.md` and `README_br.md` carry the same row in their two languages.
+
 ## 1.9.7 - pull tells a diverged branch whose patches are already upstream from a real divergence
 
 `git pull --ff-only` fails on a diverged branch with a message that says nothing
