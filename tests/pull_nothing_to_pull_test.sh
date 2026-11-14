@@ -39,6 +39,31 @@ seed "$WORK/seed-plain"
 git clone -q --bare "$WORK/seed-plain" "$WORK/remotes/plain.git"
 git clone -q "$WORK/remotes/plain.git" "$BASE/GRP/c-plain"
 
+# A rebase stopped by a conflict: HEAD is detached, but this is unfinished work,
+# not a checkout pinned on purpose. It must stay among the failures.
+seed "$WORK/seed-midrebase"
+git clone -q --bare "$WORK/seed-midrebase" "$WORK/remotes/midrebase.git"
+git clone -q "$WORK/remotes/midrebase.git" "$BASE/GRP/d-midrebase"
+git clone -q "$WORK/remotes/midrebase.git" "$WORK/forge-midrebase"
+printf 'remote\n' > "$WORK/forge-midrebase/file"
+git -C "$WORK/forge-midrebase" commit -qam remote
+git -C "$WORK/forge-midrebase" push -q origin main
+printf 'local\n' > "$BASE/GRP/d-midrebase/file"
+git -C "$BASE/GRP/d-midrebase" commit -qam local
+git -C "$BASE/GRP/d-midrebase" fetch -q
+git -C "$BASE/GRP/d-midrebase" rebase origin/main >/dev/null 2>&1 || true
+[[ -z "$(git -C "$BASE/GRP/d-midrebase" branch --show-current)" ]] \
+    || { printf 'setup: the rebase did not stop\n' >&2; exit 1; }
+
+# A detached HEAD with a commit no branch, remote or tag holds: switching away
+# would leave it to the reflog.
+seed "$WORK/seed-orphan"
+git clone -q --bare "$WORK/seed-orphan" "$WORK/remotes/orphan.git"
+git clone -q "$WORK/remotes/orphan.git" "$BASE/GRP/e-orphan"
+git -C "$BASE/GRP/e-orphan" checkout -q --detach
+printf 'orphan\n' >> "$BASE/GRP/e-orphan/file"
+git -C "$BASE/GRP/e-orphan" commit -qam "work only HEAD reaches"
+
 status=0
 out="$(bash "$BASE/git/pull.sh" | sed 's/\x1b\[[0-9;]*m//g')" || status=$?
 
@@ -51,15 +76,23 @@ refuse() {
 
 [ "$status" -eq 0 ] || { printf 'pull.sh exited %s\n\n%s\n' "$status" "$out" >&2; exit 1; }
 
-expect "(3 de 3 repos)"
+expect "(5 de 5 repos)"
 expect "↷ sem remote configurado — nada a puxar"
 expect "branch: (HEAD solto em v1)"
 expect "↷ HEAD solto — não há branch para puxar"
 expect "↷ Sem o que puxar: GRP/a-norem(sem remote) GRP/b-pinned(HEAD solto)"
 expect "✓ OK:     GRP/c-plain"
-refuse "Falhou"
+expect "✗ operação em andamento — rebase parado no meio; termine ou aborte antes de puxar"
+expect "✗ HEAD solto, commits fora de refs — 1 commit(s) só alcançável(is) pelo HEAD; crie uma branch antes de trocar"
+expect "→ git switch -c <nome>"
+expect "operação em andamento: GRP/d-midrebase"
+expect "HEAD solto, commits fora de refs: GRP/e-orphan"
 refuse "not currently on a branch"
 refuse "no tracking information"
+
+# Nothing was touched: the rebase is still stopped.
+[[ -d "$BASE/GRP/d-midrebase/.git/rebase-merge" ]] \
+    || { printf 'd-midrebase: the stopped rebase disappeared\n' >&2; exit 1; }
 
 # Nothing was touched: the pinned clone is still detached on the tag.
 [[ -z "$(git -C "$BASE/GRP/b-pinned" branch --show-current)" ]] \

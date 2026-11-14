@@ -13,6 +13,32 @@ never rewritten.
 > reconstructing them now would produce a plausible history rather than a true
 > one.
 
+## 1.9.8 - pull keeps a stopped rebase and a detached HEAD with unsaved commits among the failures
+
+1.9.7 moved every detached HEAD out of the failure list into `Sem o que puxar`,
+because the one case in the 14/11/2026 sweep was `strix-build`, pinned to a tag on
+purpose. The review then reproduced the other cases that wear a detached HEAD: a
+rebase stopped by a conflict showed up as `HEAD solto` next to that tag pin, and
+the interrupted operation, with whatever resolution sat in the index, dropped out
+of the list a person acts on. A detached HEAD carrying commits no ref holds was
+treated the same, though the next `git switch` leaves them to the reflog.
+
+Before any other check, `operation_in_progress` now looks for git's own markers
+(`rebase-merge`, `rebase-apply`, `MERGE_HEAD`, `CHERRY_PICK_HEAD`, `REVERT_HEAD`,
+`BISECT_LOG`) and files the repository as `operação em andamento`, naming the
+operation. A detached HEAD is `Sem o que puxar` only when some branch,
+remote-tracking ref or tag holds its commit; otherwise it is `HEAD solto, commits
+fora de refs`, with the count and `git switch -c <nome>` as the repair. Nothing is
+touched in either case.
+
+`pull.cmd` gets the same two checks, and closes a parity gap the review found: a
+folder where git itself fails used to be listed there as having no remote, while
+`pull.sh` keeps it as a failure; it now goes straight to the pull, as in
+`pull.sh`. `tests/pull_nothing_to_pull_test.sh` adds a rebase stopped by a
+conflict and a detached HEAD with a commit of its own, and checks that the rebase
+is still stopped afterwards. `pull.cmd` was not executed: no cmd interpreter on
+this machine.
+
 ## 1.9.8 - pull's diagnosis fetches into remote-tracking refs only and never waits on a prompt
 
 To tell whether a branch's work landed, 1.9.7 fetches each remote's default

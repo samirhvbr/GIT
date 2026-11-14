@@ -472,6 +472,19 @@ diagnose_diverged() {
     return 0
 }
 
+# An operation git stopped halfway, by name: rebase, merge, cherry-pick, revert,
+# bisect, or `am` (which shares rebase-apply). Prints nothing when there is none.
+operation_in_progress() {
+    local item marker label p
+    for item in "rebase-merge:rebase" "rebase-apply:rebase ou am" "MERGE_HEAD:merge" \
+                "CHERRY_PICK_HEAD:cherry-pick" "REVERT_HEAD:revert" "BISECT_LOG:bisect"; do
+        marker=${item%%:*}; label=${item#*:}
+        p=$(git rev-parse --git-path "$marker" 2>/dev/null) || continue
+        if [ -e "$p" ]; then printf '%s\n' "$label"; return 0; fi
+    done
+    return 0
+}
+
 ok=(); fail=(); fail_reason=(); fail_alvo=(); skipped=(); parados=()
 
 for repo in "${REPOS[@]}"; do
@@ -496,6 +509,17 @@ for repo in "${REPOS[@]}"; do
     # currently on a branch", and a repository with no remote in "sem upstream".
     # They are listed apart, so the failure list keeps only what a person has to
     # repair. A "?" branch means git itself failed here; that stays a failure.
+    # An operation stopped halfway is the opposite of "nothing to pull": it is
+    # unfinished work, often with conflicts resolved only in the index. 1.9.7 filed
+    # a rebase stopped by a conflict (HEAD detached) under "Sem o que puxar", next to
+    # a tag pinned on purpose; it is a failure, by name, before any other check.
+    op=$(operation_in_progress)
+    if [ -n "$op" ]; then
+        echo -e "   branch: ${YELLOW}${branch:-(HEAD solto)}${NC}"
+        echo -e "   ${RED}✗ operação em andamento — $op parado no meio; termine ou aborte antes de puxar${NC}"
+        fail+=("$repo"); fail_reason+=("operação em andamento"); fail_alvo+=(""); continue
+    fi
+
     if [ "$branch" != "?" ] && [ -z "$(git remote 2>/dev/null)" ]; then
         echo -e "   branch: ${YELLOW}$branch${NC}"
         echo -e "   ${YELLOW}↷ sem remote configurado — nada a puxar${NC}"
@@ -504,8 +528,16 @@ for repo in "${REPOS[@]}"; do
     if [ -z "$branch" ]; then
         solto=$(git describe --tags --always 2>/dev/null || git rev-parse --short HEAD 2>/dev/null || echo "?")
         echo -e "   branch: ${YELLOW}(HEAD solto em $solto)${NC}"
-        echo -e "   ${YELLOW}↷ HEAD solto — não há branch para puxar${NC}"
-        parados+=("$repo(HEAD solto)"); continue
+        # Pinned on purpose only when some branch, remote-tracking ref or tag holds
+        # the commit; commits only HEAD reaches go to the reflog on the next switch.
+        orfaos=$(git rev-list --count HEAD --not --branches --remotes --tags 2>/dev/null || echo "?")
+        if [ "$orfaos" = 0 ]; then
+            echo -e "   ${YELLOW}↷ HEAD solto — não há branch para puxar${NC}"
+            parados+=("$repo(HEAD solto)"); continue
+        fi
+        echo -e "   ${RED}✗ HEAD solto, commits fora de refs — $orfaos commit(s) só alcançável(is) pelo HEAD; crie uma branch antes de trocar${NC}"
+        echo -e "   ${GREEN}→ git switch -c <nome>${NC}"
+        fail+=("$repo"); fail_reason+=("HEAD solto, commits fora de refs"); fail_alvo+=(""); continue
     fi
     echo -e "   branch: ${YELLOW}$branch${NC}"
 
@@ -543,6 +575,7 @@ if [ ${#fail[@]} -gt 0 ]; then
                   "branch apagada no remoto" "divergiu, já no remoto" \
                   "divergiu do remoto" \
                   "árvore suja" "conflito" "remoto inacessível" \
+                  "operação em andamento" "HEAD solto, commits fora de refs" \
                   "diretório não encontrado" "outro"; do
         linha=""; i=0
         while [ $i -lt ${#fail[@]} ]; do

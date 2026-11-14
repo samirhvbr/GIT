@@ -93,6 +93,8 @@ set "MOT_DIVERGIU="
 set "MOT_SUJA="
 set "MOT_CONFLITO="
 set "MOT_REMOTO="
+set "MOT_ANDAMENTO="
+set "MOT_ORFAO="
 set "MOT_OUTRO="
 
 rem git's output goes to a file so that :classify can read it back.
@@ -189,6 +191,8 @@ if defined FAILLIST (
     if defined MOT_SUJA     echo       arvore suja:!MOT_SUJA!
     if defined MOT_CONFLITO echo       conflito:!MOT_CONFLITO!
     if defined MOT_REMOTO   echo       remoto inacessivel:!MOT_REMOTO!
+    if defined MOT_ANDAMENTO echo       operacao em andamento:!MOT_ANDAMENTO!
+    if defined MOT_ORFAO    echo       HEAD solto, commits fora de refs:!MOT_ORFAO!
     if defined MOT_OUTRO    echo       outro:!MOT_OUTRO!
 )
 if defined SKIPLIST echo   Pulado:%SKIPLIST%
@@ -211,10 +215,28 @@ if not errorlevel 1 (
 cd /d "!repo!"
 set "branch="
 for /f "delims=" %%b in ('git branch --show-current 2^>nul') do set "branch=%%b"
+rem A folder where git itself fails goes straight to the pull, which fails and
+rem is classified there: the same as the "?" branch of pull.sh. Without this, a
+rem repository git cannot read was listed as having no remote.
+git rev-parse --git-dir >nul 2>&1 || goto pull_tenta
+rem An operation git stopped halfway is unfinished work, never nothing to pull:
+rem rebase, merge, cherry-pick, revert, bisect, or am. It is a failure, by name.
+set "_op="
+for %%f in (rebase-merge rebase-apply MERGE_HEAD CHERRY_PICK_HEAD REVERT_HEAD BISECT_LOG) do (
+    if not defined _op for /f "delims=" %%p in ('git rev-parse --git-path %%f 2^>nul') do if exist "%%p" set "_op=%%f"
+)
+if defined _op (
+    echo    branch: !branch!
+    echo    x operacao em andamento - !_op! parado no meio; termine ou aborte antes de puxar
+    call :addmot ANDAMENTO "!rel!"
+    set /a FAIL+=1
+    set "FAILLIST=!FAILLIST! !rel!"
+    exit /b 0
+)
 rem Two repositories have nothing to pull, and neither is a failure: one with
-rem no remote configured, and one on a detached HEAD (no branch to advance, as in
-rem a checkout pinned to a tag on purpose). Same checks as pull.sh. They are
-rem listed apart, so the failure list keeps only what a person has to repair.
+rem no remote configured, and one on a detached HEAD whose commit some branch,
+rem remote ref or tag holds (a checkout pinned to a tag on purpose). Same checks
+rem as pull.sh. A detached HEAD with commits only it reaches is a failure.
 set "_nrem=0"
 for /f %%n in ('git remote 2^>nul ^| find /c /v ""') do set "_nrem=%%n"
 if "!_nrem!"=="0" (
@@ -227,10 +249,21 @@ if not defined branch (
     set "_solto="
     for /f "delims=" %%s in ('git describe --tags --always 2^>nul') do set "_solto=%%s"
     echo    branch: ^(HEAD solto em !_solto!^)
-    echo    [HEAD solto - nao ha branch para puxar]
-    set "PARADOS=!PARADOS! !rel!(HEAD solto)"
+    set "_orf=?"
+    for /f %%n in ('git rev-list --count HEAD --not --branches --remotes --tags 2^>nul') do set "_orf=%%n"
+    if "!_orf!"=="0" (
+        echo    [HEAD solto - nao ha branch para puxar]
+        set "PARADOS=!PARADOS! !rel!(HEAD solto)"
+        exit /b 0
+    )
+    echo    x HEAD solto, commits fora de refs - !_orf! commit^(s^) so alcancavel^(is^) pelo HEAD; crie uma branch antes de trocar
+    echo    -^> git switch -c ^<nome^>
+    call :addmot ORFAO "!rel!"
+    set /a FAIL+=1
+    set "FAILLIST=!FAILLIST! !rel!"
     exit /b 0
 )
+:pull_tenta
 echo    branch: !branch!
 git pull --ff-only > "%TMPOUT%" 2>&1
 set "RC=!errorlevel!"
