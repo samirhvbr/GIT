@@ -100,6 +100,38 @@ git -C "$BASE/GRP/reverted" fetch -q origin c1
 git -C "$BASE/GRP/reverted" merge -q --no-ff --no-edit origin/c1
 git -C "$BASE/GRP/reverted" branch -q --set-upstream-to=origin/main qa
 
+# The branch IS main and carries a merge that added a file of its own (an "evil
+# merge"); the remote rewrote history with the patches of both plain commits. The
+# patches match, but the merge's file exists nowhere else: `git rebase` would drop
+# it, so this must not be called landed.
+new_repo evilmerge
+commit "$BASE/GRP/evilmerge" r "main 1"
+git -C "$BASE/GRP/evilmerge" switch -qc side
+commit "$BASE/GRP/evilmerge" s "side 1"
+git -C "$BASE/GRP/evilmerge" switch -q main
+git -C "$BASE/GRP/evilmerge" merge -q --no-ff --no-commit side
+printf 'only in the merge\n' > "$BASE/GRP/evilmerge/evil.txt"
+git -C "$BASE/GRP/evilmerge" add evil.txt
+git -C "$BASE/GRP/evilmerge" commit -qm "merge side, plus a file of its own"
+forge="$WORK/forge-evilmerge"
+git clone -q "$WORK/remotes/evilmerge.git" "$forge"
+commit "$forge" other "remote work"
+git -C "$forge" fetch -q "$BASE/GRP/evilmerge" main
+git -C "$forge" cherry-pick FETCH_HEAD^1 FETCH_HEAD^2 >/dev/null
+git -C "$forge" push -q --force origin main
+
+# A local commit the upstream applied and then reverted: its patch is upstream,
+# the work is not.
+new_repo applyrevert
+commit "$BASE/GRP/applyrevert" r "local 1"
+forge="$WORK/forge-applyrevert"
+git clone -q "$WORK/remotes/applyrevert.git" "$forge"
+commit "$forge" other "remote work"
+git -C "$forge" fetch -q "$BASE/GRP/applyrevert" main
+git -C "$forge" cherry-pick FETCH_HEAD >/dev/null
+git -C "$forge" revert --no-edit HEAD >/dev/null
+git -C "$forge" push -q origin main
+
 out="$(bash "$BASE/git/pull.sh" | sed 's/\x1b\[[0-9;]*m//g')"
 
 expect() {
@@ -116,10 +148,12 @@ expect "✗ divergiu do remoto — 2 commit(s) local, 1 no remoto; 2 de 2 sem eq
 expect "✗ divergiu do remoto — 1 commit(s) local, todos merges; 2 no remoto"
 
 expect "divergiu, já no remoto: GRP/rebased→main GRP/samename"
-expect "divergiu do remoto: GRP/dirty GRP/real GRP/reverted"
+expect "✗ divergiu do remoto — 3 commit(s) local, 3 no remoto; 0 de 2 sem equivalente em origin/main (git cherry) — mais 1 merge(s), que o git cherry não compara"
+expect "✗ divergiu do remoto — 1 commit(s) local, 3 no remoto; 0 de 1 sem equivalente em origin/main (git cherry); 1 aplicado(s) e depois revertido(s) no remoto"
+expect "divergiu do remoto: GRP/applyrevert GRP/dirty GRP/evilmerge GRP/real GRP/reverted"
 
 # The diagnosis only reads: no clone moved, and the modified file is still modified.
-for pair in rebased:topic samename:main dirty:main real:main reverted:qa; do
+for pair in rebased:topic samename:main dirty:main real:main reverted:qa evilmerge:main applyrevert:main; do
     [[ "$(git -C "$BASE/GRP/${pair%%:*}" branch --show-current)" == "${pair##*:}" ]] \
         || { printf '%s left branch %s\n' "${pair%%:*}" "${pair##*:}" >&2; exit 1; }
 done

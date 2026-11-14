@@ -472,11 +472,41 @@ rem hashes, and keeps them whatever the branch did afterwards, which a tree
 rem comparison does not. git cherry does not judge merge commits, so empty output
 rem proves nothing and answers no.
 :patches_em
+rem Strict since 1.9.8, as patches_in in pull.sh: every local commit the ref lacks
+rem must be a non-merge commit (a merge can carry content git cherry never judges,
+rem and git rebase drops it), and none may have been reverted in the ref.
+set "_a1="
+set "_n1="
+for /f %%n in ('git rev-list --count HEAD --not "%~1" 2^>nul') do set "_a1=%%n"
+for /f %%n in ('git rev-list --no-merges --count HEAD --not "%~1" 2^>nul') do set "_n1=%%n"
+if not defined _a1 exit /b 1
+if "%_a1%"=="0" exit /b 1
+if not "%_a1%"=="%_n1%" exit /b 1
 git cherry "%~1" HEAD > "%TMPOUT%" 2>nul
 if errorlevel 1 exit /b 1
 for %%f in ("%TMPOUT%") do if %%~zf==0 exit /b 1
 findstr /b /c:"+" "%TMPOUT%" >nul 2>&1
 if not errorlevel 1 exit /b 1
+call :revertidos "%~1"
+if not "%REVERTIDOS%"=="0" exit /b 1
+exit /b 0
+
+rem reverted_upstream of pull.sh. Sets REVERTIDOS to the number of non-merge
+rem commits of HEAD that the ref in the first argument lacks and that were applied
+rem there and then reverted: the patch-id of the commit's reverse diff is the
+rem patch-id of a commit of the ref. The first parent is written as ~1 because a
+rem caret is the escape character of cmd.
+:revertidos
+set "REVERTIDOS=0"
+git log -p --no-merges "%~1" --not HEAD 2>nul | git patch-id --stable > "%TMPOUT%.up" 2>nul
+for %%f in ("%TMPOUT%.up") do if %%~zf==0 goto revertidos_fim
+for /f %%c in ('git rev-list --no-merges HEAD --not "%~1" 2^>nul') do (
+    for /f "tokens=1" %%r in ('git diff %%c %%c~1 2^>nul ^| git patch-id --stable 2^>nul') do (
+        findstr /b /c:"%%r " "%TMPOUT%.up" >nul 2>&1 && set /a REVERTIDOS+=1
+    )
+)
+:revertidos_fim
+if exist "%TMPOUT%.up" del /q "%TMPOUT%.up"
 exit /b 0
 
 rem Same diagnosis as diagnose_no_upstream in pull.sh. A branch with no upstream
@@ -549,7 +579,6 @@ call :patches_em "%_up%"
 if errorlevel 1 goto diverge_nao
 if /i "!_ubr!"=="%~1" goto diverge_mesma
 call :marca_pouso "!_rem!" "!_ubr!" "divergiu, ja no remoto" "divergiu do remoto" DIVPRINC DIVERGIU
-set "DETALHE=!DETALHE!!_nota!"
 exit /b 0
 :diverge_mesma
 set "_sujo=0"
@@ -557,11 +586,11 @@ for /f %%n in ('git status --porcelain --untracked-files=no 2^>nul ^| find /c /v
 if not "%_sujo%"=="0" goto diverge_suja
 set "MOTIVO=divergiu, ja no remoto"
 set "MOTKEY=DIVPRINC"
-set "DETALHE=os !_nm! commit(s) locais ja estao em !_up!; so o historico divergiu (!_b! no remoto)!_nota!"
+set "DETALHE=os !_nm! commit(s) locais ja estao em !_up!; so o historico divergiu (!_b! no remoto)"
 set "DICA=git rebase - descarta so os commits locais que !_up! ja tem"
 exit /b 0
 :diverge_suja
-set "DETALHE=os !_nm! commit(s) locais ja estao em !_up!, mas ha alteracoes nao commitadas em %_sujo% arquivo(s) rastreado(s)!_nota!"
+set "DETALHE=os !_nm! commit(s) locais ja estao em !_up!, mas ha alteracoes nao commitadas em %_sujo% arquivo(s) rastreado(s)"
 set "DICA=git status --short - guarde ou commite as alteracoes antes do rebase"
 exit /b 0
 :diverge_nao
@@ -569,6 +598,9 @@ if "%_nm%"=="0" goto diverge_merges
 set "_novos=0"
 for /f %%n in ('git cherry "%_up%" HEAD 2^>nul ^| findstr /b /c:"+" ^| find /c /v ""') do set "_novos=%%n"
 set "DETALHE=%_a% commit(s) local, %_b% no remoto; %_novos% de %_nm% sem equivalente em %_up% (git cherry)"
+call :revertidos "%_up%"
+if not "%REVERTIDOS%"=="0" set "DETALHE=!DETALHE!; %REVERTIDOS% aplicado(s) e depois revertido(s) no remoto"
+set "DETALHE=!DETALHE!!_nota!"
 exit /b 0
 :diverge_merges
 set "DETALHE=%_a% commit(s) local, todos merges; %_b% no remoto"

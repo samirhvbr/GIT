@@ -13,6 +13,32 @@ never rewritten.
 > reconstructing them now would produce a plausible history rather than a true
 > one.
 
+## 1.9.8 - pull calls work landed by patches only when no merge or revert can hide a loss
+
+The 14/11/2026 review reproduced two ways 1.9.7 could talk someone out of their
+own work. A `master` holding a plain commit and a merge that added a file of its
+own, whose remote had been rewritten with the patches of the plain commits, was
+reported `divergiu, já no remoto` with `git rebase` as the repair — and following
+it deleted the file the merge had added, because `git cherry` never judges merge
+commits and `git rebase` drops them. And a local commit that the upstream had
+applied and then reverted was reported the same way, because its forward patch is
+upstream even though the work is not. The same weakness made a deleted branch
+whose merge carried content of its own read `branch apagada, já na principal`.
+
+`patches_in` is now strict. It says yes only when every commit of `HEAD` that the
+ref lacks is a non-merge commit with a patch-equivalent there, there is at least
+one, and none of them was reverted afterwards. The revert is found by its
+patch-id: the reverse diff of the local commit has the same patch-id as the
+revert commit upstream (`reverted_upstream`). A real divergence now names both
+things the counts used to hide — `1 aplicado(s) e depois revertido(s) no remoto`,
+`mais 1 merge(s), que o git cherry não compara`.
+
+`tests/pull_diverged_test.sh` adds `evilmerge` and `applyrevert`, and
+`tests/pull_deleted_branch_test.sh` adds `mergecontent`; the three were filed as
+landed by the previous commit's `pull.sh` and are real divergences or unlanded
+branches now. `pull.cmd` gets the same rule in `:patches_em` and a `:revertidos`
+routine; it was not executed: no cmd interpreter on this machine.
+
 ## 1.9.8 - release.sh and the release workflow are resynchronised with repodocs
 
 The 14/11/2026 review found this repository's `tools/release.sh` 169 lines behind

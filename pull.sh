@@ -194,16 +194,43 @@ default_branch() {
     return 0
 }
 
-# True when every non-merge commit of HEAD that $1 lacks has a patch-equivalent in
-# $1, and there is at least one: a rebase merge or a cherry-pick keeps the patches
-# and loses the hashes, and keeps them whatever the branch did afterwards, which a
-# tree comparison does not. `git cherry` does not judge merge commits, so output
-# with nothing in it (a branch of merges only) proves nothing and answers no.
+# How many non-merge commits of HEAD that $1 lacks were applied in $1 and then
+# reverted there: the reverse of their patch is itself a commit of $1. `git cherry`
+# marks such a commit as present, because the forward patch is there too, while
+# the work is gone. Read-only; prints a number.
+reverted_upstream() {
+    local up c rev n=0
+    up=$(git log -p --no-merges "$1" --not HEAD 2>/dev/null | git patch-id --stable 2>/dev/null | cut -d' ' -f1)
+    if [ -n "$up" ]; then
+        for c in $(git rev-list --no-merges HEAD --not "$1" 2>/dev/null); do
+            rev=$(git diff "$c" "$c~1" 2>/dev/null | git patch-id --stable 2>/dev/null | cut -d' ' -f1)
+            if [ -n "$rev" ] && grep -qxF "$rev" <<<"$up"; then n=$((n + 1)); fi
+        done
+    fi
+    echo "$n"
+}
+
+# True only when the work of HEAD is in $1 as patches, with nothing that a patch
+# comparison cannot see. Every commit of HEAD that $1 lacks must be a non-merge
+# commit with a patch-equivalent in $1 (`git cherry`), there must be at least one,
+# and none of them may have been reverted in $1 afterwards.
+#
+# Merges are refused outright. A merge can carry content of its own — a conflict
+# resolution, a file added while merging — and `git cherry` does not judge merge
+# commits; `git rebase` drops them. The 1.9.7 version accepted a branch whose
+# plain commits matched and printed `git rebase` as the repair, and in the
+# 14/11/2026 review following that hint deleted a file the merge had added. A
+# patch applied and then reverted upstream was the other hole: the work is not
+# there, and the rebase would drop the local commit too.
 patches_in() {
-    local out
+    local ahead nm out
+    ahead=$(git rev-list --count HEAD --not "$1" 2>/dev/null) || return 1
+    nm=$(git rev-list --no-merges --count HEAD --not "$1" 2>/dev/null) || return 1
+    [ "$ahead" -gt 0 ] && [ "$ahead" -eq "$nm" ] || return 1
     out=$(git cherry "$1" HEAD 2>/dev/null) || return 1
     [ -n "$out" ] || return 1
-    ! grep -q '^+' <<<"$out"
+    ! grep -q '^+' <<<"$out" || return 1
+    [ "$(reverted_upstream "$1")" -eq 0 ]
 }
 
 # Is the work of HEAD already in $1, a remote-tracking ref? It is when HEAD is an
@@ -396,25 +423,23 @@ diagnose_no_upstream() {
 # the base reason and the status hint. Read-only; sets `motivo`, `detalhe`, `dica`,
 # `alvo`.
 diagnose_diverged() {
-    local branch="$1" up rem ubr ahead behind nm novos sujos nota=""
+    local branch="$1" up rem ubr ahead behind nm novos sujos merges rv
     motivo="divergiu do remoto"; detalhe=""; dica=""; alvo=""
     up=$(git rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null) || return 0
     read -r ahead behind < <(git rev-list --left-right --count "HEAD...$up" 2>/dev/null) || return 0
     nm=$(git rev-list --no-merges --count HEAD --not "$up" 2>/dev/null || echo 0)
-    [ $((ahead - nm)) -gt 0 ] && nota=" — mais $((ahead - nm)) merge(s), que o git cherry não compara"
     rem="${up%%/*}"; ubr="${up#*/}"
     if patches_in "$up"; then
         if [ "$ubr" != "$branch" ]; then
             mark_landed "$rem" "$ubr" "divergiu, já no remoto" "divergiu do remoto"
-            detalhe="$detalhe$nota"
         else
             sujos=$(git status --porcelain --untracked-files=no 2>/dev/null | wc -l | tr -d ' ')
             if [ "${sujos:-0}" -gt 0 ]; then
-                detalhe="os $nm commit(s) locais já estão em $up, mas há alterações não commitadas em $sujos arquivo(s) rastreado(s)$nota"
+                detalhe="os $nm commit(s) locais já estão em $up, mas há alterações não commitadas em $sujos arquivo(s) rastreado(s)"
                 dica="git status --short — guarde ou commite as alterações antes do rebase"
             else
                 motivo="divergiu, já no remoto"
-                detalhe="os $nm commit(s) locais já estão em $up; só o histórico divergiu ($behind no remoto)$nota"
+                detalhe="os $nm commit(s) locais já estão em $up; só o histórico divergiu ($behind no remoto)"
                 dica="git rebase — descarta só os commits locais que $up já tem"
             fi
         fi
@@ -422,7 +447,10 @@ diagnose_diverged() {
         detalhe="$ahead commit(s) local, todos merges; $behind no remoto"
     else
         novos=$(git cherry "$up" HEAD 2>/dev/null | grep -c '^+' || true)
+        merges=$((ahead - nm)); rv=$(reverted_upstream "$up")
         detalhe="$ahead commit(s) local, $behind no remoto; $novos de $nm sem equivalente em $up (git cherry)"
+        if [ "${rv:-0}" -gt 0 ]; then detalhe="$detalhe; $rv aplicado(s) e depois revertido(s) no remoto"; fi
+        if [ "$merges" -gt 0 ]; then detalhe="$detalhe — mais $merges merge(s), que o git cherry não compara"; fi
     fi
     return 0
 }

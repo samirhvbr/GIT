@@ -115,6 +115,26 @@ new_contrib prextra squash-rewrite
 printf '7 %s\n' "$(git -C "$BASE/GRP/prmerged" rev-parse HEAD)" > "$WORK/gh/up__prmerged"
 printf '8 %s\n' "$(git -C "$BASE/GRP/prextra" rev-parse HEAD~1)" > "$WORK/gh/up__prextra"
 
+# Deleted after its plain commits were cherry-picked upstream, but the branch also
+# holds a merge that added a file of its own. Not landed: that file is nowhere else.
+new_repo mergecontent main 1
+git -C "$BASE/GRP/mergecontent" switch -qc side
+commit "$BASE/GRP/mergecontent" s "side 1"
+git -C "$BASE/GRP/mergecontent" switch -q feat
+git -C "$BASE/GRP/mergecontent" merge -q --no-ff --no-commit side
+printf 'only in the merge\n' > "$BASE/GRP/mergecontent/evil.txt"
+git -C "$BASE/GRP/mergecontent" add evil.txt
+git -C "$BASE/GRP/mergecontent" commit -qm "merge side, plus a file of its own"
+git -C "$BASE/GRP/mergecontent" push -q origin feat
+forge="$WORK/forge-mergecontent"
+git clone -q "$WORK/remotes/mergecontent.git" "$forge"
+git -C "$forge" fetch -q origin feat
+git -C "$forge" cherry-pick FETCH_HEAD^1~0 >/dev/null 2>&1 || true
+git -C "$forge" cherry-pick FETCH_HEAD^2 >/dev/null
+commit "$forge" s "later edit of s"
+git -C "$forge" push -q origin main
+git -C "$forge" push -q origin --delete feat
+
 # Landed like `merged`, but the working tree is not clean. Modified tracked
 # files (staged or not) make the switch unsafe; an untracked file does not.
 new_repo staged main 1;    forge staged main merge
@@ -143,7 +163,7 @@ expect "branch apagada, já na principal: GRP/contrib→main GRP/merged→main G
 expect "branch apagada, árvore suja: GRP/staged GRP/unstaged"
 expect "✗ branch apagada, já na principal — o trabalho já está em upstream/main"
 expect "✗ branch apagada no remoto — 2 commit(s) fora de origin/main; confira antes de trocar de branch"
-expect "branch apagada no remoto: GRP/contribopen GRP/prextra GRP/unmerged"
+expect "branch apagada no remoto: GRP/contribopen GRP/mergecontent GRP/prextra GRP/unmerged"
 expect "o trabalho já está em upstream/main — PR #7 mesclado com este mesmo commit"
 expect "✗ branch apagada, árvore suja — o trabalho já está em origin/main, mas há alterações não commitadas em 1 arquivo(s) rastreado(s)"
 expect "→ git status --short — guarde ou commite as alterações antes de trocar para main"
@@ -154,7 +174,7 @@ switches="$(grep -cF -- '→ git switch main && git pull --ff-only' <<<"$out")"
 [[ "$switches" == 4 ]] || { printf 'switch offered %s times, expected 4\n\n%s\n' "$switches" "$out" >&2; exit 1; }
 
 # The diagnosis only reads: every clone is still on the branch it was on.
-for name in contrib contribopen prmerged prextra merged squashed unmerged staged unstaged untracked; do
+for name in contrib contribopen prmerged prextra mergecontent merged squashed unmerged staged unstaged untracked; do
     [[ "$(git -C "$BASE/GRP/$name" branch --show-current)" == feat ]] \
         || { printf '%s left branch feat\n' "$name" >&2; exit 1; }
 done
