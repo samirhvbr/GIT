@@ -1,11 +1,11 @@
 @echo off
 setlocal enabledelayedexpansion
-rem pull.cmd v1.9.6 - equivalente Windows do pull.sh
+rem pull.cmd v1.9.7 - equivalente Windows do pull.sh
 rem Auto-descobre os repos git sob a BASE (BASE\repo e BASE\grupo\repo)
 rem e roda "git pull --ff-only" em cada um.
 rem Texto sem acentos de proposito (compatibilidade com o code page do cmd).
 
-set "VERSION=1.9.6"
+set "VERSION=1.9.7"
 
 rem BASE = pasta-mae deste script. O .cmd fica em <BASE>\git\, entao
 rem subimos de git\ para a base. %~dp0 = pasta do script (com \ no final).
@@ -77,6 +77,7 @@ set /a OK=0, FAIL=0
 set "OKLIST="
 set "FAILLIST="
 set "SKIPLIST="
+set "PARADOS="
 
 rem One list per failure reason, filled by :addmot. Same set of reasons as the
 rem .sh, minus "diretorio nao encontrado": this side only calls :pull on a
@@ -180,6 +181,7 @@ if defined FAILLIST (
     if defined MOT_OUTRO    echo       outro:!MOT_OUTRO!
 )
 if defined SKIPLIST echo   Pulado:%SKIPLIST%
+if defined PARADOS echo   Sem o que puxar:!PARADOS!
 echo.
 pause
 exit /b 0
@@ -198,6 +200,26 @@ if not errorlevel 1 (
 cd /d "!repo!"
 set "branch="
 for /f "delims=" %%b in ('git branch --show-current 2^>nul') do set "branch=%%b"
+rem Two repositories have nothing to pull, and neither is a failure: one with
+rem no remote configured, and one on a detached HEAD (no branch to advance, as in
+rem a checkout pinned to a tag on purpose). Same checks as pull.sh. They are
+rem listed apart, so the failure list keeps only what a person has to repair.
+set "_nrem=0"
+for /f %%n in ('git remote 2^>nul ^| find /c /v ""') do set "_nrem=%%n"
+if "!_nrem!"=="0" (
+    echo    branch: !branch!
+    echo    [sem remote configurado - nada a puxar]
+    set "PARADOS=!PARADOS! !rel!(sem remote)"
+    exit /b 0
+)
+if not defined branch (
+    set "_solto="
+    for /f "delims=" %%s in ('git describe --tags --always 2^>nul') do set "_solto=%%s"
+    echo    branch: ^(HEAD solto em !_solto!^)
+    echo    [HEAD solto - nao ha branch para puxar]
+    set "PARADOS=!PARADOS! !rel!(HEAD solto)"
+    exit /b 0
+)
 echo    branch: !branch!
 git pull --ff-only > "%TMPOUT%" 2>&1
 set "RC=!errorlevel!"

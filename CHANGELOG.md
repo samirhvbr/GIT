@@ -13,6 +13,35 @@ never rewritten.
 > reconstructing them now would produce a plausible history rather than a true
 > one.
 
+## 1.9.7 - pull sets a detached HEAD and a repository with no remote apart from the failures
+
+The 14/11/2026 sweep over 173 repositories ended with 27 in the failure list, and
+two of them had nothing to repair:
+
+- `strix-build` is checked out on the tag `shvia-v1.2.45` on purpose: it is the
+  directory the release binaries are built from. With no branch, `git pull` says
+  "You are not currently on a branch", which `classify_fail` has no pattern for,
+  so the repository was filed under `outro` with git's whole message above it.
+- `000/recon-deck-review2-evidence-20261022` has no remote at all. `git pull`
+  answers "There is no tracking information for the current branch", which is
+  the `sem upstream` pattern, and the summary listed it next to the branches whose
+  repair is `git branch --set-upstream-to`.
+
+Neither has a repair, because neither has anything to pull. `pull.sh` now checks
+both before it calls `git pull`: no remote configured prints
+`↷ sem remote configurado — nada a puxar`, and a detached HEAD prints
+`branch: (HEAD solto em <tag or short hash>)` and `↷ HEAD solto — não há branch
+para puxar`. The repository goes to a new summary line, `↷ Sem o que puxar:`, with
+the reason in parentheses beside each name, and not to `Falhou`. Nothing is
+pulled, fetched or moved in either case. A branch name of `?` — git itself failed
+in that directory — is still a failure, and still reaches the pull.
+
+`tests/pull_nothing_to_pull_test.sh` builds a repository with no remote, a clone
+detached on a tag and an ordinary clone. Against the 1.9.6 `pull.sh` it fails on
+the first expectation; now it passes, and it also checks that the pinned clone is
+still detached on its tag afterwards. `pull.cmd` carries the same two checks and
+the same summary line; it was not executed: no cmd interpreter on this machine.
+
 ## 1.9.6 - push.cmd and status.cmd drop a stray CR that kept the tree dirty
 
 The `exit /b 0` line that closes the per-repository subroutine of `push.cmd`

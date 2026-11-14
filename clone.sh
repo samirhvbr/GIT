@@ -1,8 +1,8 @@
 #!/bin/bash
-# clone.sh v1.9.6
+# clone.sh v1.9.7
 set -euo pipefail
 
-VERSION="1.9.6"
+VERSION="1.9.7"
 
 # BASE = pasta-mãe deste script (mesma lógica do pull/push): os
 # repositórios são clonados para ~/x/, um nível acima de git/.

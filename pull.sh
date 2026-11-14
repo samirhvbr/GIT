@@ -1,8 +1,8 @@
 #!/bin/bash
-# pull.sh v1.9.6
+# pull.sh v1.9.7
 set -euo pipefail
 
-VERSION="1.9.6"
+VERSION="1.9.7"
 
 # BASE = pasta-mãe deste script. Os scripts ficam em ~/x/git/ e os
 # projetos um nível acima (em ~/x/), então subimos de git/ para a base.
@@ -241,7 +241,7 @@ diagnose_deleted_branch() {
     return 0
 }
 
-ok=(); fail=(); fail_reason=(); fail_alvo=(); skipped=()
+ok=(); fail=(); fail_reason=(); fail_alvo=(); skipped=(); parados=()
 
 for repo in "${REPOS[@]}"; do
     echo -e "\n${CYAN}${BOLD}── $repo${NC}"
@@ -257,6 +257,25 @@ for repo in "${REPOS[@]}"; do
     fi
 
     branch=$(git branch --show-current 2>/dev/null || echo "?")
+
+    # Two repositories have nothing to pull, and neither is a failure: one with
+    # no remote configured (there is nowhere to pull from), and one on a detached
+    # HEAD (there is no branch to advance). A checkout pinned to a tag on purpose,
+    # like strix-build, used to land in "outro" with git's own "You are not
+    # currently on a branch", and a repository with no remote in "sem upstream".
+    # They are listed apart, so the failure list keeps only what a person has to
+    # repair. A "?" branch means git itself failed here; that stays a failure.
+    if [ "$branch" != "?" ] && [ -z "$(git remote 2>/dev/null)" ]; then
+        echo -e "   branch: ${YELLOW}$branch${NC}"
+        echo -e "   ${YELLOW}↷ sem remote configurado — nada a puxar${NC}"
+        parados+=("$repo(sem remote)"); continue
+    fi
+    if [ -z "$branch" ]; then
+        solto=$(git describe --tags --always 2>/dev/null || git rev-parse --short HEAD 2>/dev/null || echo "?")
+        echo -e "   branch: ${YELLOW}(HEAD solto em $solto)${NC}"
+        echo -e "   ${YELLOW}↷ HEAD solto — não há branch para puxar${NC}"
+        parados+=("$repo(HEAD solto)"); continue
+    fi
     echo -e "   branch: ${YELLOW}$branch${NC}"
 
     # The output is captured instead of streamed because classify_fail reads it.
@@ -297,4 +316,5 @@ if [ ${#fail[@]} -gt 0 ]; then
     done
 fi
 [ ${#skipped[@]} -gt 0 ] && echo -e "${YELLOW}  ↷ Pulado: ${skipped[*]}${NC}"
+[ ${#parados[@]} -gt 0 ] && echo -e "${YELLOW}  ↷ Sem o que puxar: ${parados[*]}${NC}"
 echo ""
