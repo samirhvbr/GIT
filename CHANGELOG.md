@@ -13,6 +13,14 @@ never rewritten.
 > reconstructing them now would produce a plausible history rather than a true
 > one.
 
+## 1.9.9 - the READMEs describe pull's HTTPS credential reason
+
+The `pull.sh` row of both READMEs lists `credencial HTTPS falhou` among the
+reasons, between conflict and unreachable remote: what produces it, that
+`gh auth status` tells an expired token, that a GitHub remote gets the
+`git remote set-url` to SSH as the hint, and that the URL is printed without its
+`user:token` part.
+
 ## 1.9.9 - pull names an HTTPS credential failure and points to the SSH remote
 
 On 22/11/2026 fifteen of the sweep's 22 failures were one cause: private
