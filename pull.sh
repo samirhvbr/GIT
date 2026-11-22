@@ -1,8 +1,8 @@
 #!/bin/bash
-# pull.sh v1.9.8
+# pull.sh v1.9.9
 set -euo pipefail
 
-VERSION="1.9.8"
+VERSION="1.9.9"
 
 # BASE = pasta-mãe deste script. Os scripts ficam em ~/x/git/ e os
 # projetos um nível acima (em ~/x/), então subimos de git/ para a base.
@@ -167,6 +167,8 @@ classify_fail() {
             echo "divergiu do remoto" ;;
         *"local changes"*|*"would be overwritten"*|*"unstaged changes"*|*"Please commit"*)
             echo "árvore suja" ;;
+        *"could not read Username"*|*"could not read Password"*|*"Authentication failed"*|*"Invalid username or"*)
+            echo "credencial HTTPS falhou" ;;
         *"Could not read from remote"*|*"unable to access"*|*"Repository not found"*|*"Permission denied"*|*"ould not resolve host"*|*"Connection"*|*"timed out"*)
             echo "remoto inacessível" ;;
         *"fix conflicts"*|*"CONFLICT"*)
@@ -472,6 +474,33 @@ diagnose_diverged() {
     return 0
 }
 
+# An HTTPS remote that asked for a username and got none, or got one it refused.
+# On 22/11/2026 fifteen private repositories failed this way at once: their remotes
+# were HTTPS, the credential helper was `gh auth git-credential`, and the gh token
+# had become invalid. Every one was filed under "outro" with no hint, while each
+# answered over SSH, and the repair is one of two: renew the helper's credential,
+# or move the remote to SSH. The URL is shown without any user:token part, so a
+# credential embedded in it never reaches the screen or a log. Read-only; sets
+# `motivo`, `detalhe`, `dica`, `alvo`.
+diagnose_credential() {
+    local branch="$1" rem url shown slug
+    motivo="credencial HTTPS falhou"; detalhe=""; dica=""; alvo=""
+    rem=$(git config "branch.$branch.remote" 2>/dev/null || echo origin)
+    url=$(git config --get "remote.$rem.url" 2>/dev/null) || return 0
+    shown=$(printf '%s' "$url" | sed -E 's#^(https?://)[^/@]*@#\1#')
+    detalhe="$shown pediu usuário e senha e nenhuma credencial serviu"
+    case "$(git config --get-urlmatch credential.helper "$url" 2>/dev/null)" in
+        *"auth git-credential"*)
+            detalhe="$detalhe — o helper é o gh: gh auth status diz se o token vale" ;;
+    esac
+    case "$shown" in
+        https://github.com/*)
+            slug="${shown#https://github.com/}"; slug="${slug%/}"; slug="${slug%.git}"
+            dica="git remote set-url $rem git@github.com:$slug.git" ;;
+    esac
+    return 0
+}
+
 # An operation git stopped halfway, by name: rebase, merge, cherry-pick, revert,
 # bisect, or `am` (which shares rebase-apply). Prints nothing when there is none.
 operation_in_progress() {
@@ -556,6 +585,8 @@ for repo in "${REPOS[@]}"; do
             diagnose_no_upstream "$branch"
         elif [ "$motivo" = "divergiu do remoto" ]; then
             diagnose_diverged "$branch"
+        elif [ "$motivo" = "credencial HTTPS falhou" ]; then
+            diagnose_credential "$branch"
         fi
         echo -e "   ${RED}✗ $motivo${detalhe:+ — $detalhe}${NC}"
         if [ -n "$dica" ]; then echo -e "   ${GREEN}→ $dica${NC}"; fi
@@ -574,7 +605,7 @@ if [ ${#fail[@]} -gt 0 ]; then
                   "branch apagada, árvore suja" \
                   "branch apagada no remoto" "divergiu, já no remoto" \
                   "divergiu do remoto" \
-                  "árvore suja" "conflito" "remoto inacessível" \
+                  "árvore suja" "conflito" "credencial HTTPS falhou" "remoto inacessível" \
                   "operação em andamento" "HEAD solto, commits fora de refs" \
                   "diretório não encontrado" "outro"; do
         linha=""; i=0

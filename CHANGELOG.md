@@ -13,6 +13,28 @@ never rewritten.
 > reconstructing them now would produce a plausible history rather than a true
 > one.
 
+## 1.9.9 - pull names an HTTPS credential failure and points to the SSH remote
+
+On 22/11/2026 fifteen of the sweep's 22 failures were one cause: private
+repositories with an HTTPS remote, `gh auth git-credential` as the credential
+helper, and a gh token that had become invalid. Git's message, `could not read
+Username for 'https://github.com'`, matched none of the patterns, so every one was
+filed under `outro` with no detail and no hint — while each of them answered over
+SSH. They looked like renamed or deleted repositories, and none was.
+
+`credencial HTTPS falhou` is a reason of its own now, on both sides, matched on
+`could not read Username`, `could not read Password`, `Authentication failed` and
+`Invalid username or`. The detail names the remote's URL with any `user:token`
+part removed, so a credential embedded in it never reaches the screen or a log,
+and says when the helper is gh, whose `gh auth status` tells whether the token is
+still good. For a GitHub remote the hint is the `git remote set-url` to the SSH
+address. The diagnosis reads only the local config; it adds no network call.
+
+`tests/pull_credential_test.sh` drives two repositories through a fake transport
+that answers like an HTTPS remote with no credential, one of them with a token in
+its URL. It fails on 1.9.8 (`outro`, no hint) and passes now. `pull.cmd` was not
+executed: no cmd interpreter on this machine.
+
 ## 1.9.8 - status skips an empty .git on both sides and status.cmd counts pending repositories right
 
 `status.sh` and `status.cmd` never got the discovery check `pull` received in

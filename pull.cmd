@@ -1,11 +1,11 @@
 @echo off
 setlocal enabledelayedexpansion
-rem pull.cmd v1.9.8 - equivalente Windows do pull.sh
+rem pull.cmd v1.9.9 - equivalente Windows do pull.sh
 rem Auto-descobre os repos git sob a BASE (BASE\repo e BASE\grupo\repo)
 rem e roda "git pull --ff-only" em cada um.
 rem Texto sem acentos de proposito (compatibilidade com o code page do cmd).
 
-set "VERSION=1.9.8"
+set "VERSION=1.9.9"
 
 rem BASE = pasta-mae deste script. O .cmd fica em <BASE>\git\, entao
 rem subimos de git\ para a base. %~dp0 = pasta do script (com \ no final).
@@ -92,6 +92,7 @@ set "MOT_DIVPRINC="
 set "MOT_DIVERGIU="
 set "MOT_SUJA="
 set "MOT_CONFLITO="
+set "MOT_CREDENCIAL="
 set "MOT_REMOTO="
 set "MOT_ANDAMENTO="
 set "MOT_ORFAO="
@@ -190,6 +191,7 @@ if defined FAILLIST (
     if defined MOT_DIVERGIU echo       divergiu do remoto:!MOT_DIVERGIU!
     if defined MOT_SUJA     echo       arvore suja:!MOT_SUJA!
     if defined MOT_CONFLITO echo       conflito:!MOT_CONFLITO!
+    if defined MOT_CREDENCIAL echo       credencial HTTPS falhou:!MOT_CREDENCIAL!
     if defined MOT_REMOTO   echo       remoto inacessivel:!MOT_REMOTO!
     if defined MOT_ANDAMENTO echo       operacao em andamento:!MOT_ANDAMENTO!
     if defined MOT_ORFAO    echo       HEAD solto, commits fora de refs:!MOT_ORFAO!
@@ -281,6 +283,7 @@ if "!RC!"=="0" (
     if "!MOTKEY!"=="APAGADA" call :apagada "!branch!"
     if "!MOTKEY!"=="UPSTREAM" call :semup "!branch!"
     if "!MOTKEY!"=="DIVERGIU" call :diverge "!branch!"
+    if "!MOTKEY!"=="CREDENCIAL" call :credencial "!branch!"
     set "GIT_TERMINAL_PROMPT=!ORIG_GTP!"
     set "GCM_INTERACTIVE=!ORIG_GCM!"
     set "LINHA=x !MOTIVO!"
@@ -329,6 +332,12 @@ findstr /c:"fix conflicts" /c:"CONFLICT" "%TMPOUT%" >nul
 if not errorlevel 1 (
     set "MOTIVO=conflito"
     set "MOTKEY=CONFLITO"
+    exit /b 0
+)
+findstr /c:"could not read Username" /c:"could not read Password" /c:"Authentication failed" /c:"Invalid username or" "%TMPOUT%" >nul
+if not errorlevel 1 (
+    set "MOTIVO=credencial HTTPS falhou"
+    set "MOTKEY=CREDENCIAL"
     exit /b 0
 )
 findstr /c:"Could not read from remote" /c:"unable to access" /c:"Repository not found" /c:"Permission denied" /c:"ould not resolve host" /c:"Connection" /c:"timed out" "%TMPOUT%" >nul
@@ -648,6 +657,37 @@ set "DETALHE=!DETALHE!!_nota!"
 exit /b 0
 :diverge_merges
 set "DETALHE=%_a% commit(s) local, todos merges; %_b% no remoto"
+exit /b 0
+
+rem Same diagnosis as diagnose_credential in pull.sh: an HTTPS remote that asked
+rem for a username and got none, or got one it refused. The repair is to renew
+rem the helper's credential or to move the remote to SSH, so the hint is the
+rem set-url to SSH for a GitHub remote. The URL is shown without any user:token
+rem part, so a credential embedded in it never reaches the screen. Sets MOTIVO,
+rem MOTKEY, DETALHE, DICA and ALVO.
+:credencial
+set "_rem="
+for /f "delims=" %%r in ('git config "branch.%~1.remote" 2^>nul') do set "_rem=%%r"
+if not defined _rem set "_rem=origin"
+set "_url="
+for /f "delims=" %%u in ('git config --get "remote.%_rem%.url" 2^>nul') do set "_url=%%u"
+if not defined _url exit /b 0
+set "_shown=!_url!"
+if /i "!_url:~0,8!"=="https://" (
+    for /f "tokens=1* delims=@" %%a in ("!_url:~8!") do (
+        set "_ui=%%a"
+        if not "%%b"=="" if "!_ui:/=!"=="!_ui!" set "_shown=https://%%b"
+    )
+)
+set "DETALHE=!_shown! pediu usuario e senha e nenhuma credencial serviu"
+set "_hlp="
+for /f "delims=" %%h in ('git config --get-urlmatch credential.helper "%_url%" 2^>nul') do set "_hlp=%%h"
+if defined _hlp if not "!_hlp:auth git-credential=!"=="!_hlp!" set "DETALHE=!DETALHE! - o helper e o gh: gh auth status diz se o token vale"
+if /i not "!_shown:~0,19!"=="https://github.com/" exit /b 0
+set "_slug=!_shown:~19!"
+if "!_slug:~-1!"=="/" set "_slug=!_slug:~0,-1!"
+if /i "!_slug:~-4!"==".git" set "_slug=!_slug:~0,-4!"
+set "DICA=git remote set-url !_rem! git@github.com:!_slug!.git"
 exit /b 0
 
 rem Acumula o repo na lista do motivo. O nome da variavel e montado:
